@@ -1,0 +1,59 @@
+/* Estilos específicos para inputs de fecha */
+input[type="date"] {
+  color: #111827 !important;
+  font-weight: 500 !important;
+  background-color: white !important;
+}
+
+input[type="date"]::-webkit-datetime-edit {
+  color: #111827 !important;
+  font-weight: 500 !important;
+  padding: 0;
+}
+
+input[type="date"]::-webkit-datetime-edit-text {
+  color: #6B7280 !important;
+  font-weight: normal !important;
+}
+
+input[type="date"]::-webkit-datetime-edit-month-field {
+  color: #111827 !important;
+  font-weight: 500 !important;
+}
+
+input[type="date"]::-webkit-datetime-edit-day-field {
+  color: #111827 !important;
+  font-weight: 500 !important;
+}
+
+input[type="date"]::-webkit-datetime-edit-year-field {
+  color: #111827 !important;
+  font-weight: 500 !important;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  color: #6B7280;
+  opacity: 1;
+  cursor: pointer;
+}
+
+input[type="date"]:hover::-webkit-calendar-picker-indicator {
+  color: #374151;
+}
+
+input[type="date"]:focus {
+  outline: none !important;
+  border-color: #3B82F6 !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+}
+
+/* Firefox */
+input[type="date"]::-moz-focus-inner {
+  border: 0;
+}
+
+/* Edge y otros navegadores */
+input[type="date"]::-webkit-inner-spin-button,
+input[type="date"]::-webkit-outer-spin-button {
+  opacity: 1;
+}
