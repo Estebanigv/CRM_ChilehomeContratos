@@ -1532,6 +1532,11 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
   const [showContractPreview, setShowContractPreview] = useState(false)
   const [contractEditableData, setContractEditableData] = useState<any>(null)
   const [showMissingFieldsEditor, setShowMissingFieldsEditor] = useState(false)
+  
+  // Estados para autocompletado de email
+  const [emailSuggestions, setEmailSuggestions] = useState<string[]>([])
+  const [showEmailSuggestions, setShowEmailSuggestions] = useState(false)
+  const [emailInputValue, setEmailInputValue] = useState('')
 
   // Los datos ya vienen filtrados del API cuando se aplican fechas
   // Solo usar filtrado cliente cuando no hay fechas (para datos iniciales sin filtro)
@@ -1635,9 +1640,62 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
     return validateContractData(venta)
   }, [editedVenta, selectedVenta])
 
-  // Función optimizada para manejar cambios en campos editables
+  // Función simplificada para manejar cambios en campos
   const handleFieldChange = useCallback((field: string, value: string) => {
-    setEditedVenta(prev => ({ ...prev, [field]: value }))
+    setEditedVenta((prev: any) => ({ ...prev, [field]: value }))
+  }, [])
+
+  // Dominios de email populares para autocompletado
+  const popularEmailDomains = [
+    '@gmail.com',
+    '@yahoo.com', 
+    '@hotmail.com',
+    '@outlook.com',
+    '@yahoo.es',
+    '@hotmail.es',
+    '@live.com',
+    '@icloud.com',
+    '@protonmail.com',
+    '@zoho.com'
+  ]
+
+  // Función para manejar cambios en campo de email con autocompletado
+  const handleEmailChange = useCallback((field: string, value: string) => {
+    setEditedVenta((prev: any) => ({ ...prev, [field]: value }))
+    setEmailInputValue(value)
+    
+    // Mostrar sugerencias solo si hay @ y no hay dominio completo
+    if (value.includes('@') && !value.includes('.')) {
+      const [username, domain] = value.split('@')
+      if (domain && domain.length > 0) {
+        const suggestions = popularEmailDomains
+          .filter(d => d.toLowerCase().includes(domain.toLowerCase()))
+          .map(d => username + d)
+          .slice(0, 5)
+        
+        setEmailSuggestions(suggestions)
+        setShowEmailSuggestions(suggestions.length > 0)
+      } else if (value.endsWith('@')) {
+        // Si solo escribió @, mostrar todos los dominios
+        const suggestions = popularEmailDomains
+          .map(d => value.slice(0, -1) + d)
+          .slice(0, 5)
+        
+        setEmailSuggestions(suggestions)
+        setShowEmailSuggestions(true)
+      } else {
+        setShowEmailSuggestions(false)
+      }
+    } else {
+      setShowEmailSuggestions(false)
+    }
+  }, [])
+
+  // Función para seleccionar una sugerencia
+  const selectEmailSuggestion = useCallback((suggestion: string, field: string) => {
+    setEditedVenta((prev: any) => ({ ...prev, [field]: suggestion }))
+    setEmailInputValue(suggestion)
+    setShowEmailSuggestions(false)
   }, [])
 
   // Función auxiliar para renderizar campo editable
@@ -1672,6 +1730,84 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
       </div>
     )
   }, [editedVenta, isEditingFields, editingSection, handleFieldChange])
+
+  // Componente especializado para campo de email con autocompletado
+  const renderEmailField = useCallback((
+    label: string,
+    field: string,
+    currentValue: any,
+    section: string
+  ) => {
+    const displayValue = editedVenta ? editedVenta[field] : currentValue
+    const isEditing = (isEditingFields && editingSection === 'all') || editingSection === section
+    
+    return (
+      <div className="relative">
+        <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">{label}</p>
+        {isEditing ? (
+          <div className="relative">
+            <input
+              type="email"
+              value={displayValue || ''}
+              onChange={(e) => handleEmailChange(field, e.target.value)}
+              onBlur={() => setTimeout(() => setShowEmailSuggestions(false), 200)}
+              onFocus={() => {
+                if (displayValue && displayValue.includes('@') && !displayValue.includes('.')) {
+                  const [username, domain] = displayValue.split('@')
+                  if (domain) {
+                    const suggestions = popularEmailDomains
+                      .filter(d => d.toLowerCase().includes(domain.toLowerCase()))
+                      .map(d => username + d)
+                      .slice(0, 5)
+                    
+                    setEmailSuggestions(suggestions)
+                    setShowEmailSuggestions(suggestions.length > 0)
+                  }
+                }
+              }}
+              className="w-full text-sm font-medium text-gray-900 bg-white border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder={`Ingrese ${label.toLowerCase()}`}
+            />
+            
+            {/* Lista de sugerencias */}
+            {showEmailSuggestions && emailSuggestions.length > 0 && (
+              <div 
+                className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-40 overflow-y-auto"
+                onWheel={(e) => {
+                  e.stopPropagation();
+                  const target = e.currentTarget;
+                  const { scrollTop, scrollHeight, clientHeight } = target;
+                  
+                  // Si el scroll llega al tope y se intenta seguir haciendo scroll hacia arriba
+                  if (scrollTop === 0 && e.deltaY < 0) {
+                    e.preventDefault();
+                  }
+                  // Si el scroll llega al final y se intenta seguir haciendo scroll hacia abajo
+                  else if (scrollTop + clientHeight >= scrollHeight && e.deltaY > 0) {
+                    e.preventDefault();
+                  }
+                }}
+              >
+                {emailSuggestions.map((suggestion, index) => (
+                  <div
+                    key={index}
+                    onClick={() => selectEmailSuggestion(suggestion, field)}
+                    className="px-3 py-2 text-sm text-gray-900 hover:bg-blue-50 hover:text-blue-700 cursor-pointer border-b border-gray-100 last:border-b-0"
+                  >
+                    {suggestion}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-sm font-medium text-gray-900">
+            {displayValue || <span className="text-orange-600">⚠ Sin información</span>}
+          </p>
+        )}
+      </div>
+    )
+  }, [editedVenta, isEditingFields, editingSection, handleEmailChange, showEmailSuggestions, emailSuggestions, selectEmailSuggestion, popularEmailDomains])
 
   // Función para renderizar header de sección con botón editar
   const renderSectionHeader = (title: string, icon: any, sectionKey: string) => {
@@ -2552,7 +2688,7 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
             </div>
             
             {/* Content */}
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
               {/* Grid de información */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 {/* Columna 1: Datos del Cliente */}
@@ -2563,7 +2699,7 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
                       {renderEditableField("Nombre Completo", "cliente_nombre", selectedVenta.cliente_nombre, "cliente")}
                       {renderEditableField("RUT", "cliente_rut", selectedVenta.cliente_rut, "cliente", "text", (value) => value ? formatRUT(value) : value)}
                       {renderEditableField("Teléfono", "cliente_telefono", selectedVenta.cliente_telefono, "cliente", "tel", (value) => value ? formatPhone(value) : value)}
-                      {renderEditableField("Email", "cliente_email", selectedVenta.cliente_email, "cliente", "email")}
+                      {renderEmailField("Email", "cliente_email", selectedVenta.cliente_email, "cliente")}
                       {renderEditableField("Dirección de Entrega", "direccion_entrega", selectedVenta.direccion_entrega, "cliente")}
                       {renderEditableField("Comuna", "comuna", selectedVenta.comuna, "cliente")}
                     </div>
@@ -2614,7 +2750,7 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
                         {((isEditingFields && editingSection === 'all') || editingSection === 'documentacion') ? (
                           <select
                             value={editedVenta?.forma_pago || selectedVenta.forma_pago || ""}
-                            onChange={(e) => setEditedVenta(prev => ({ ...prev, forma_pago: e.target.value }))}
+                            onChange={(e) => handleFieldChange('forma_pago', e.target.value)}
                             className="w-full text-sm font-medium text-gray-900 bg-white border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                           >
                             <option value="" disabled className="text-gray-500">Seleccionar forma de pago</option>
@@ -2683,7 +2819,7 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
                         {editingSection === "estado" ? (
                           <select
                             value={editedVenta?.estado_crm || ''}
-                            onChange={(e) => setEditedVenta(prev => ({ ...prev, estado_crm: e.target.value }))}
+                            onChange={(e) => handleFieldChange('estado_crm', e.target.value)}
                             className="w-full text-sm font-medium text-gray-900 bg-white border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                           >
                             <option value="">Seleccione estado</option>
@@ -2713,7 +2849,7 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
                       {editingSection === "observaciones" ? (
                         <textarea
                           value={editedVenta?.observaciones_crm || ''}
-                          onChange={(e) => setEditedVenta(prev => ({ ...prev, observaciones_crm: e.target.value }))}
+                          onChange={(e) => handleFieldChange('observaciones_crm', e.target.value)}
                           className="w-full text-sm text-gray-700 bg-white border border-gray-300 rounded-lg p-3 min-h-[80px] focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                           placeholder="Ingrese observaciones..."
                         />
