@@ -12,8 +12,10 @@ Esta aplicación permite a los ejecutivos de ChileHome generar, editar, validar 
 - **Generación PDF**: Creación de contratos profesionales en formato PDF
 - **Envío Automático**: Distribución de contratos por email al cliente y empresa
 - **Roles de Usuario**: Sistema de permisos para administradores y ejecutivos
-- **Editor Intuitivo**: Interfaz moderna para edición de contratos
+- **Editor Intuitivo**: Interfaz moderna para edición de contratos con optimizaciones de rendimiento
 - **Seguridad**: Autenticación robusta y encriptación de datos sensibles
+- **Rendimiento Optimizado**: Implementación de React hooks (useMemo, useCallback) para mejorar la experiencia de usuario
+- **Interfaz Mejorada**: Firma corporativa integrada y mejores controles de validación
 
 ## 🛠 Tecnologías Utilizadas
 
@@ -39,7 +41,7 @@ Esta aplicación permite a los ejecutivos de ChileHome generar, editar, validar 
 ### 1. Clonar e Instalar
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/Estebanigv/CRM_ChilehomeContratos.git
 cd chilehome-contratos
 npm install
 ```
@@ -194,6 +196,32 @@ Para soporte técnico o preguntas sobre el sistema:
 - **Email**: desarrollo@chilehome.cl
 - **Documentación**: Ver `/docs` para guías detalladas
 - **Issues**: Usar GitHub Issues para reportar bugs
+
+## 🆕 Actualizaciones Recientes
+
+### Versión Actual - Diciembre 2024
+
+#### 🚀 Optimizaciones de Rendimiento
+- **Mejora significativa en campos de entrada**: Implementación de `useMemo` y `useCallback` para eliminar lag en escritura
+- **Validación optimizada**: Memoización de validaciones para mejorar respuesta del sistema
+- **Renderizado eficiente**: Optimización de re-renders innecesarios en formularios
+
+#### ✨ Mejoras de Interfaz
+- **Firma corporativa**: Integración de firma oficial de ChileHome en contratos
+- **Selector de forma de pago**: Añadido selector efectivo/transferencia en sección de documentación
+- **Advertencias mejoradas**: Mayor visibilidad de advertencias de borrador con styling amarillo
+- **Representante corporativo**: Actualizado para mostrar "ChileHome Spa" como firmante
+
+#### 🔧 Corrección de Errores
+- **Eliminación de archivos corruptos**: Removido DashboardClient.broken.tsx que causaba errores de compilación
+- **Validación de datos**: Corregida lógica para reconocer datos guardados correctamente
+- **Sincronización de estados**: Mejorada sincronización entre diferentes estados de UI
+- **Prevención de errores**: Agregadas validaciones null/undefined para evitar crashes
+
+#### 📁 Recursos Actualizados
+- Agregadas imágenes corporativas oficiales
+- Logo de ChileHome integrado
+- Firma digital corporativa para contratos
 
 ## 📄 Licencia
 
