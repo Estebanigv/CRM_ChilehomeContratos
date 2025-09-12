@@ -272,43 +272,67 @@ class CRMApi {
     }
     
     try {
-      // Usar el endpoint correcto según la documentación
-      let endpoint = '/Admin/Referido/?sel_fil=1&page=1'
+      // Construir el endpoint base
+      let baseEndpoint = '/Admin/Referido/?sel_fil=1'
       
-      // Si no se proporcionan fechas, usar desde septiembre 2025 hasta hoy
+      // Si no se proporcionan fechas, usar desde primer día del mes actual hasta hoy
       if (!fechaInicio && !fechaFin) {
         const hoy = new Date()
-        const fechaDesde = '2025-09-01' // Desde 1 de septiembre 2025
-        const fechaHasta = hoy.toISOString().split('T')[0] // Hasta hoy
-        endpoint += `&sel_ini_des=${fechaDesde}&sel_ini_has=${fechaHasta}`
-        console.log('📅 Aplicando filtro dinámico: desde septiembre 2025 hasta hoy')
+        const primerDiaDelMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
+        const fechaDesde = primerDiaDelMes.toISOString().split('T')[0]
+        const fechaHasta = hoy.toISOString().split('T')[0]
+        baseEndpoint += `&sel_ini_des=${fechaDesde}&sel_ini_has=${fechaHasta}`
+        console.log('📅 Usando filtro de fechas personalizado:', fechaDesde, 'hasta', fechaHasta)
       } else if (fechaInicio && fechaFin) {
-        endpoint += `&sel_ini_des=${fechaInicio}&sel_ini_has=${fechaFin}`
+        baseEndpoint += `&sel_ini_des=${fechaInicio}&sel_ini_has=${fechaFin}`
         console.log('📅 Usando filtro de fechas personalizado:', fechaInicio, 'hasta', fechaFin)
       } else {
         // Para obtener ventas validadas de la última semana
-        endpoint += '&ultima_semana=validacion'
+        baseEndpoint += '&ultima_semana=validacion'
         console.log('📅 Obteniendo ventas validadas de la última semana')
       }
       
-      console.log('🔗 CRM Endpoint:', endpoint) // Debug
+      console.log('🔗 CRM Endpoint:', baseEndpoint) // Debug
       
-      // Probemos tanto GET como POST
-      console.log('🚀 Intentando con GET...') // Debug
-      let data: SmartCRMVentasResponse
+      // OBTENER TODAS LAS PÁGINAS
+      const todasLasVentas: any[] = []
+      let paginaActual = 1
+      let totalPaginas = 1
       
-      try {
-        data = await this.makeRequest<SmartCRMVentasResponse>(endpoint, { method: 'GET' })
-      } catch (error) {
-        console.log('❌ GET falló, intentando con POST...') // Debug
-        data = await this.makeRequest<SmartCRMVentasResponse>(endpoint, { method: 'POST' })
-      }
+      do {
+        const endpoint = `${baseEndpoint}&page=${paginaActual}`
+        console.log(`🚀 Obteniendo página ${paginaActual} de ${totalPaginas}...`)
+        
+        let data: SmartCRMVentasResponse
+        try {
+          data = await this.makeRequest<SmartCRMVentasResponse>(endpoint, { method: 'GET' })
+        } catch (error) {
+          console.log('❌ GET falló, intentando con POST...')
+          data = await this.makeRequest<SmartCRMVentasResponse>(endpoint, { method: 'POST' })
+        }
+        
+        if (!data.err && data.inf) {
+          console.log(`✅ Página ${paginaActual} - Ventas encontradas: ${data.inf.length}`)
+          todasLasVentas.push(...data.inf)
+          
+          // Actualizar info de paginación
+          if (paginaActual === 1) {
+            totalPaginas = data.totalPages || 1
+            console.log(`📊 Total de páginas: ${totalPaginas}, Total de registros: ${data.totalrow || data.tot}`)
+          }
+          
+          paginaActual++
+        } else {
+          console.log(`❌ Error en página ${paginaActual}:`, data.msg)
+          break
+        }
+      } while (paginaActual <= totalPaginas)
       
-      if (!data.err && data.inf && data.inf.length > 0) {
-        console.log('✅ CRM Response SUCCESS - Ventas encontradas:', data.inf.length)
+      if (todasLasVentas.length > 0) {
+        console.log('✅ CRM Response SUCCESS - TOTAL de ventas obtenidas:', todasLasVentas.length)
         
         // Mapear datos del CRM a nuestro formato
-        const ventas = data.inf.map(venta => this.mapearVentaCRM(venta))
+        const ventas = todasLasVentas.map(venta => this.mapearVentaCRM(venta))
           .filter(venta => !ejecutivoId || venta.ejecutivo_id === ejecutivoId)
         
         // Para los contratos sin número, asignar números correlativos (solo para visualización)
@@ -327,12 +351,9 @@ class CRMApi {
         
         console.log('📊 Ventas mapeadas exitosamente:', ventas.length)
         return ventas
-      } else if (!data.err && data.inf && data.inf.length === 0) {
+      } else {
         console.log('📭 No se encontraron ventas para el periodo especificado')
         return []
-      } else {
-        console.log('❌ CRM Response ERROR:', data.msg)
-        throw new Error(`CRM Error: ${data.msg}`)
       }
     } catch (error) {
       console.error('Error al obtener ventas del CRM:', error)

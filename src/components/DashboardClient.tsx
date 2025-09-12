@@ -6,7 +6,7 @@ import {
   Clock, CheckCircle, Send, Loader2, X, ChevronDown, AlertCircle,
   Phone, DollarSign, Calendar, MapPin, MessageSquare, User as UserIcon,
   BarChart3, Users, Truck, Home, TrendingUp, ArrowUpRight, ChevronRight,
-  Mail, MoreVertical, Save, AlertTriangle
+  Mail, MoreVertical, Save, AlertTriangle, Upload, ArrowLeft, Edit3
 } from 'lucide-react'
 import ChileHomeLoader from './ChileHomeLoader'
 import ContratoPrevisualizador from './ContratoPrevisualizador'
@@ -527,7 +527,9 @@ const DashboardOverview = ({
   applyingFilter,
   resetting,
   soloValidados,
-  setSoloValidados
+  setSoloValidados,
+  paginaActualVentas,
+  setPaginaActualVentas
 }: { 
   stats: DashboardStats, 
   ventas: Venta[], 
@@ -545,7 +547,9 @@ const DashboardOverview = ({
   applyingFilter: boolean,
   resetting: boolean,
   soloValidados: boolean,
-  setSoloValidados: (value: boolean) => void
+  setSoloValidados: (value: boolean) => void,
+  paginaActualVentas: number,
+  setPaginaActualVentas: (page: number) => void
 }) => {
   const mesActual = new Date().toLocaleDateString('es-CL', { month: 'long', year: 'numeric' })
   const diaActual = new Date().getDate()
@@ -556,8 +560,7 @@ const DashboardOverview = ({
   const [paginaActualClientes, setPaginaActualClientes] = useState(1)
   const clientesPorPagina = 5
   
-  // Estados para paginación de ventas
-  const [paginaActualVentas, setPaginaActualVentas] = useState(1)
+  // Estados para paginación de ventas (usando el estado del componente padre)
   const ventasPorPagina = 5
   
   // Las estadísticas ya vienen calculadas desde el componente padre con los datos filtrados
@@ -1047,15 +1050,62 @@ const ContratosSection = ({
   fechaInicioProyecto,
   fechaHoy,
   generatingContractId,
-  handleGenerarContrato
+  handleGenerarContrato,
+  contractFilters,
+  setContractFilters,
+  setShowContractPreview,
+  paginaActualVentas,
+  setPaginaActualVentas
 }: any) => {
-  // Estados para paginación de ventas
-  const [paginaActualVentas, setPaginaActualVentas] = useState(1)
+  // Estados para paginación de ventas (usando el estado del componente padre)
   const ventasPorPagina = 5
   
-  // Paginación de ventas con filtro de validados y ordenamiento por fecha más reciente
-  const ventasParaMostrar = ventas
-    .filter((v: any) => !soloValidados || v.estado_crm?.toLowerCase().includes('validado') || v.estado_crm?.toLowerCase().includes('completado'))
+  // Función para aplicar todos los filtros
+  const applyContractFilters = (ventas: any[]) => {
+    return ventas.filter((v: any) => {
+      // Filtro de validados (compatibilidad)
+      if (soloValidados && !v.estado_crm?.toLowerCase().includes('validado') && !v.estado_crm?.toLowerCase().includes('completado')) {
+        return false
+      }
+      
+      // Filtro por estado
+      if (contractFilters.status !== 'todos') {
+        const estado = v.estado_crm?.toLowerCase() || 'pendiente'
+        switch (contractFilters.status) {
+          case 'pendiente':
+            return !v.numero_contrato || v.numero_contrato === '0' || estado.includes('pendiente')
+          case 'borrador':
+            return estado.includes('borrador') || estado.includes('draft')
+          case 'validado':
+            return estado.includes('validado') || estado.includes('validation')
+          case 'generado':
+            return estado.includes('generado') || estado.includes('contrato') || (v.numero_contrato && v.numero_contrato !== '0')
+          case 'enviado':
+            return estado.includes('enviado') || estado.includes('sent')
+        }
+      }
+      
+      // Filtro por ejecutivo
+      if (contractFilters.ejecutivo !== 'todos') {
+        const ejecutivoVenta = cleanVendorName(v.ejecutivo_nombre)
+        if (ejecutivoVenta !== contractFilters.ejecutivo) {
+          return false
+        }
+      }
+      
+      // Filtro por modelo
+      if (contractFilters.modelo !== 'todos') {
+        if (v.modelo_casa !== contractFilters.modelo) {
+          return false
+        }
+      }
+      
+      return true
+    })
+  }
+
+  // Paginación de ventas con filtros aplicados y ordenamiento por fecha más reciente
+  const ventasParaMostrar = applyContractFilters(ventas)
     .sort((a: any, b: any) => {
       // Ordenar por fecha de venta más reciente primero
       const fechaA = new Date(a.fecha_venta || a.created_at || '1970-01-01').getTime()
@@ -1095,23 +1145,68 @@ const ContratosSection = ({
         {/* Línea inferior: Controles distribuidos */}
         <div className="flex items-center justify-between gap-4">
           
-          {/* Lado izquierdo: Botones de acción independientes */}
-          <div className="flex items-center gap-3">
-            {/* Filtro de validados */}
-            <label className="flex items-center gap-2 text-sm text-gray-700">
-              <input
-                type="checkbox"
-                checked={soloValidados}
-                onChange={(e) => setSoloValidados(e.target.checked)}
-                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              />
-              Solo validados
-            </label>
+          {/* Lado izquierdo: Controles simplificados */}
+          <div className="flex items-center gap-6">
+            {/* Filtro de estado mejorado */}
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <Filter className="h-4 w-4 text-gray-700" />
+                <span className="text-sm font-semibold text-gray-800">Estado:</span>
+              </div>
+              
+              <select
+                value={contractFilters.status}
+                onChange={(e) => setContractFilters({...contractFilters, status: e.target.value})}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[160px]"
+              >
+                <option value="todos">Todos los estados</option>
+                <option value="pendiente">Pendientes</option>
+                <option value="borrador">Borradores</option>
+                <option value="validado">Validados</option>
+                <option value="generado">Generados</option>
+                <option value="enviado">Enviados</option>
+              </select>
+              
+              {/* Botones para filtros de contrato */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    console.log('Aplicando filtro de estado:', contractFilters.status)
+                    // Force re-render by updating pagination to reset to first page
+                    setPaginaActualVentas(1)
+                    // Force component update
+                    setFiltering(true)
+                    setTimeout(() => setFiltering(false), 200)
+                  }}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 text-sm font-medium flex items-center gap-2"
+                  disabled={filtering}
+                  title="Aplicar filtros de estado"
+                >
+                  {filtering ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Filter className="h-4 w-4" />
+                  )}
+                  Aplicar
+                </button>
+                
+                <button
+                  onClick={() => {
+                    console.log('Restaurando filtros de estado')
+                    setContractFilters({ status: 'todos' })
+                  }}
+                  className="px-4 py-2 bg-gray-100 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-200 transition-colors duration-200 text-sm font-medium"
+                  title="Restaurar filtros a valores por defecto"
+                >
+                  Restaurar
+                </button>
+              </div>
+            </div>
             
-            {/* Botón de actualización forzada del CRM */}
+            {/* Botón de actualización CRM con mejor espacio */}
             <button
               onClick={() => fetchVentas(fechaInicio, fechaFin, false, 'force')}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors duration-200 font-medium text-sm"
+              className="flex items-center gap-2 px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors duration-200 font-semibold text-sm shadow-sm"
               disabled={loading || filtering}
               title="Forzar actualización desde el CRM"
             >
@@ -1342,17 +1437,34 @@ const ContratosSection = ({
                       </button>
                     )}
                     
+                    {/* Botón principal: Vista previa del contrato */}
                     <button
-                      onClick={async () => {
-                        await handleGenerarContrato(venta)
+                      onClick={() => {
+                        setSelectedVenta(venta)
+                        setShowContractPreview(true)
+                      }}
+                      className="flex items-center gap-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs font-medium shadow-sm"
+                      title="Revisar y generar contrato - Recomendado"
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                      Revisar Contrato
+                    </button>
+                    
+                    {/* Botón secundario: Generación rápida para casos urgentes */}
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation()
+                        if (confirm('¿Generar contrato sin revisión previa? Se recomienda usar "Revisar Contrato" primero.')) {
+                          await handleGenerarContrato(venta)
+                        }
                       }}
                       disabled={generatingContractId === venta.id}
-                      className={`flex items-center gap-1 px-3 py-1.5 rounded-lg transition-all duration-200 text-xs font-medium ${
+                      className={`flex items-center gap-1 px-3 py-1.5 rounded-lg transition-all duration-200 text-xs font-medium border ${
                         generatingContractId === venta.id
-                          ? 'bg-purple-100 text-purple-600 animate-pulse' 
-                          : 'bg-purple-50 text-purple-600 hover:bg-purple-100'
+                          ? 'bg-purple-100 text-purple-600 border-purple-200 animate-pulse' 
+                          : 'bg-white text-purple-600 border-purple-200 hover:bg-purple-50'
                       }`}
-                      title={generatingContractId === venta.id ? "Generando contrato..." : "Generar contrato"}
+                      title={generatingContractId === venta.id ? "Generando contrato..." : "Generación rápida (sin revisión)"}
                     >
                       {generatingContractId === venta.id ? (
                         <>
@@ -1362,7 +1474,7 @@ const ContratosSection = ({
                       ) : (
                         <>
                           <FileText className="h-3.5 w-3.5" />
-                          Contrato
+                          Rápido
                         </>
                       )}
                     </button>
@@ -1393,7 +1505,10 @@ const ContratosSection = ({
                   {ventasParaMostrar.length}
                 </p>
                 <p className="text-sm text-slate-600">
-                  {soloValidados ? 'Contratos validados' : 'Total de ventas'}
+                  {soloValidados ? 'Contratos validados' : 'Ventas mostradas'}
+                </p>
+                <p className="text-xs text-slate-500 mt-1">
+                  de {ventas.length} total CRM
                 </p>
               </div>
               
@@ -1406,7 +1521,13 @@ const ContratosSection = ({
                     return sum + valor;
                   }, 0))}
                 </p>
-                <p className="text-sm text-slate-600">Valor total</p>
+                <p className="text-sm text-slate-600">Valor filtrado</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  de {formatCurrency(ventas.reduce((sum: number, v: any) => {
+                    const valor = typeof v.valor_total === 'number' ? v.valor_total : parseFloat(v.valor_total?.toString() || '0') || 0;
+                    return sum + valor;
+                  }, 0))} total
+                </p>
               </div>
             </div>
             
@@ -1421,7 +1542,7 @@ const ContratosSection = ({
         {totalPaginasVentas > 1 && (
           <div className="flex items-center justify-between bg-white rounded-xl p-4 border border-gray-200">
             <div className="text-sm text-gray-600">
-              Mostrando {indiceInicialVentas + 1} a {Math.min(indiceFinalVentas, ventasParaMostrar.length)} de {ventasParaMostrar.length} ventas
+              Mostrando {indiceInicialVentas + 1} a {Math.min(indiceFinalVentas, ventasParaMostrar.length)} de {ventasParaMostrar.length} ventas filtradas ({ventas.length} total del CRM)
             </div>
             <div className="flex items-center gap-2">
               <button 
@@ -1487,6 +1608,13 @@ const ContratosSection = ({
 
 export default function DashboardClient({ user, contratos }: { user: any, contratos: any[] }) {
   const [activeSection, setActiveSection] = useState('dashboard')
+  const [showContractPreview, setShowContractPreview] = useState(false)
+  const [contractFilters, setContractFilters] = useState({
+    status: 'todos', // todos, borrador, validado, enviado, generado
+    ejecutivo: 'todos',
+    modelo: 'todos'
+  })
+  const [paginaActualVentas, setPaginaActualVentas] = useState(1)
   const [ventas, setVentas] = useState<Venta[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [clientesLoading, setClientesLoading] = useState(false)
@@ -1509,11 +1637,13 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
   const [applyingFilter, setApplyingFilter] = useState(false) // Para botón Aplicar
   const [resetting, setResetting] = useState(false) // Para botón Reset
   const [error, setError] = useState<string | null>(null)
-  // Define las fechas por defecto: desde septiembre 2025 hasta hoy (dinámico)
+  // Define las fechas por defecto: AUTOMÁTICO - del día 1 del mes actual hasta hoy
   const ahora = new Date()
   const fechaHoy = new Date(ahora.getTime() - (ahora.getTimezoneOffset() * 60000)).toISOString().split('T')[0]
-  // Fecha de inicio fija en septiembre 2025 como solicitado
-  const fechaInicioProyecto = '2025-09-01' // Desde 1 de septiembre 2025
+  
+  // Calcular automáticamente el primer día del mes actual
+  const primerDiaDelMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1)
+  const fechaInicioProyecto = new Date(primerDiaDelMes.getTime() - (primerDiaDelMes.getTimezoneOffset() * 60000)).toISOString().split('T')[0]
   const fechaFinPredeterminada = fechaHoy // Hasta el día de hoy
   
   const [fechaInicio, setFechaInicio] = useState(fechaInicioProyecto)
@@ -1529,7 +1659,6 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
   const [editingSection, setEditingSection] = useState<string | null>(null)
   const [editedVenta, setEditedVenta] = useState<any>(null)
   const [showContractConfirmation, setShowContractConfirmation] = useState(false)
-  const [showContractPreview, setShowContractPreview] = useState(false)
   const [contractEditableData, setContractEditableData] = useState<any>(null)
   const [showMissingFieldsEditor, setShowMissingFieldsEditor] = useState(false)
   
@@ -1561,13 +1690,33 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
     try {
       // Aquí iría la lógica para guardar en el CRM/backend
       // Por ahora solo actualizamos localmente
+      const updatedVenta = { ...selectedVenta, ...editedVenta }
+      
       setVentas(prevVentas => 
         prevVentas.map(v => 
-          v.id === selectedVenta.id ? { ...v, ...editedVenta } : v
+          v.id === selectedVenta.id ? updatedVenta : v
         )
       )
       
-      setSelectedVenta({ ...selectedVenta, ...editedVenta })
+      setSelectedVenta(updatedVenta)
+      
+      // Sincronizar contractEditableData con los cambios realizados
+      setContractEditableData(prevData => ({
+        ...prevData,
+        ...updatedVenta,
+        cliente_telefono: editedVenta.cliente_telefono || updatedVenta.cliente_telefono,
+        cliente_correo: editedVenta.cliente_email || editedVenta.cliente_correo || updatedVenta.cliente_email || updatedVenta.cliente_correo,
+        direccion_entrega: editedVenta.direccion_entrega || updatedVenta.direccion_entrega,
+        forma_pago: editedVenta.forma_pago || updatedVenta.forma_pago
+      }))
+      
+      console.log('✅ ContractEditableData sincronizado:', {
+        cliente_telefono: editedVenta.cliente_telefono || updatedVenta.cliente_telefono,
+        cliente_correo: editedVenta.cliente_email || editedVenta.cliente_correo || updatedVenta.cliente_email || updatedVenta.cliente_correo,
+        direccion_entrega: editedVenta.direccion_entrega || updatedVenta.direccion_entrega,
+        forma_pago: editedVenta.forma_pago || updatedVenta.forma_pago
+      })
+      
       setIsEditingFields(false)
       setNotification({
         type: 'success',
@@ -1608,13 +1757,26 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
     try {
       // Aquí iría la lógica para guardar en el CRM/backend
       // Por ahora solo actualizamos localmente
+      const updatedVenta = { ...selectedVenta, ...editedVenta }
+      
       setVentas(prevVentas => 
         prevVentas.map(v => 
-          v.id === selectedVenta.id ? { ...v, ...editedVenta } : v
+          v.id === selectedVenta.id ? updatedVenta : v
         )
       )
       
-      setSelectedVenta({ ...selectedVenta, ...editedVenta })
+      setSelectedVenta(updatedVenta)
+      
+      // Sincronizar contractEditableData con los cambios realizados
+      setContractEditableData(prevData => ({
+        ...prevData,
+        ...updatedVenta,
+        cliente_telefono: editedVenta.cliente_telefono || updatedVenta.cliente_telefono,
+        cliente_correo: editedVenta.cliente_email || editedVenta.cliente_correo || updatedVenta.cliente_email || updatedVenta.cliente_correo,
+        direccion_entrega: editedVenta.direccion_entrega || updatedVenta.direccion_entrega,
+        forma_pago: editedVenta.forma_pago || updatedVenta.forma_pago
+      }))
+      
       setEditingSection(null)
       setNotification({
         type: 'success',
@@ -2363,6 +2525,8 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
               resetting={resetting}
               soloValidados={soloValidados}
               setSoloValidados={setSoloValidados}
+              paginaActualVentas={paginaActualVentas}
+              setPaginaActualVentas={setPaginaActualVentas}
             />
           )}
           {activeSection === 'contratos' && (
@@ -2386,6 +2550,11 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
               fechaHoy={fechaHoy}
               generatingContractId={generatingContractId}
               handleGenerarContrato={handleGenerarContrato}
+              contractFilters={contractFilters}
+              setContractFilters={setContractFilters}
+              setShowContractPreview={setShowContractPreview}
+              paginaActualVentas={paginaActualVentas}
+              setPaginaActualVentas={setPaginaActualVentas}
             />
           )}
           {activeSection === 'logistica' && (
@@ -3048,11 +3217,11 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
                     </div>
                   )}
                   
-                  {(contractEditableData?.cliente_correo || selectedVenta.cliente_correo) && (
+                  {(contractEditableData?.cliente_correo || selectedVenta.cliente_correo || selectedVenta.cliente_email) && (
                     <div>
                       <span className="text-gray-600">Correo:</span>
                       <span className="ml-2 font-medium text-gray-900">
-                        {contractEditableData?.cliente_correo || selectedVenta.cliente_correo}
+                        {contractEditableData?.cliente_correo || selectedVenta.cliente_correo || selectedVenta.cliente_email}
                       </span>
                     </div>
                   )}
@@ -3103,7 +3272,7 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
                   // Usar los datos más actualizados (combinando contractEditableData y selectedVenta)
                   const datosActuales = {
                     cliente_telefono: contractEditableData?.cliente_telefono || selectedVenta.cliente_telefono,
-                    cliente_correo: contractEditableData?.cliente_correo || selectedVenta.cliente_correo,
+                    cliente_correo: contractEditableData?.cliente_correo || selectedVenta.cliente_correo || selectedVenta.cliente_email,
                     forma_pago: contractEditableData?.forma_pago || selectedVenta.forma_pago,
                     direccion_entrega: contractEditableData?.direccion_entrega || selectedVenta.direccion_entrega
                   }
@@ -3152,7 +3321,7 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
                             </div>
                           )}
                           
-                          {!selectedVenta.cliente_correo && (
+                          {!(selectedVenta.cliente_correo || selectedVenta.cliente_email) && (
                             <div>
                               <label className="block text-xs text-gray-600 mb-1">Correo electrónico</label>
                               <input
@@ -3266,7 +3435,8 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
             
             {/* Footer */}
             <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 rounded-b-lg">
-              <div className="flex gap-3">
+              {/* Primera fila de botones - Acciones principales */}
+              <div className="flex gap-3 mb-3">
                 <button
                   onClick={() => setShowContractConfirmation(false)}
                   className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-all"
@@ -3292,7 +3462,7 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
                     const datosFinales = {
                       ...selectedVenta,
                       cliente_telefono: contractEditableData?.cliente_telefono || selectedVenta.cliente_telefono,
-                      cliente_correo: contractEditableData?.cliente_correo || selectedVenta.cliente_correo,
+                      cliente_correo: contractEditableData?.cliente_correo || selectedVenta.cliente_correo || selectedVenta.cliente_email,
                       forma_pago: contractEditableData?.forma_pago || selectedVenta.forma_pago,
                     }
                     
@@ -3335,6 +3505,78 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
                   )}
                 </button>
               </div>
+
+              {/* Segunda fila - Opciones de edición */}
+              <div className="border-t border-gray-200 pt-3">
+                <p className="text-xs text-gray-600 mb-2">¿Necesitas editar el contrato?</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={async () => {
+                      // Generar y descargar contrato editable
+                      const numeroContrato = selectedVenta.numero_contrato || generateNextContractNumber(ventas)
+                      const fileName = `Contrato_${numeroContrato}_${selectedVenta.cliente_nombre.replace(/\s/g, '_')}_EDITABLE.docx`
+                      
+                      // Simular descarga del archivo editable
+                      setNotification({
+                        type: 'info',
+                        message: `Descargando contrato editable...\n📄 ${fileName}\n\nEdita el archivo y súbelo cuando esté listo.`
+                      })
+                      
+                      // Aquí iría la lógica real para generar el documento editable
+                      // Por ahora es solo una simulación
+                      setTimeout(() => {
+                        const blob = new Blob(['Contrato editable simulado'], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = fileName;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                      }, 1000)
+                    }}
+                    className="flex-1 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-xs font-medium transition-all flex items-center justify-center gap-1"
+                  >
+                    <Download className="h-3 w-3" />
+                    Descargar Editable
+                  </button>
+                  
+                  <button
+                    onClick={() => {
+                      setNotification({
+                        type: 'info',
+                        message: 'Editor en línea próximamente disponible'
+                      })
+                    }}
+                    className="flex-1 px-3 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 text-xs font-medium transition-all flex items-center justify-center gap-1"
+                  >
+                    <Edit className="h-3 w-3" />
+                    Editor en Línea
+                  </button>
+                  
+                  <label className="flex-1">
+                    <input
+                      type="file"
+                      accept=".pdf,.docx,.doc"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) {
+                          setNotification({
+                            type: 'success',
+                            message: `Archivo subido: ${file.name}\n\nPróximamente se integrará al flujo de contratos.`
+                          })
+                        }
+                      }}
+                    />
+                    <div className="flex-1 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-xs font-medium transition-all flex items-center justify-center gap-1 cursor-pointer">
+                      <Upload className="h-3 w-3" />
+                      Subir Editado
+                    </div>
+                  </label>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -3342,71 +3584,120 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
 
       {/* Modal de Vista Previa del Contrato */}
       {showContractPreview && selectedVenta && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
-              <h3 className="text-xl font-bold text-gray-900">
-                Vista Previa del Contrato
-              </h3>
-              <button
-                onClick={() => setShowContractPreview(false)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                <X className="h-6 w-6" />
-              </button>
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-[9999]">
+          <div className="h-full flex flex-col">
+            {/* Header Fijo del Modal */}
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-4 shadow-lg flex-shrink-0">
+              <div className="flex items-center justify-between max-w-7xl mx-auto">
+                <div>
+                  <h2 className="text-xl font-bold mb-1">Vista Previa del Contrato</h2>
+                  <p className="text-blue-100 text-sm">
+                    Cliente: {formatProperCase(selectedVenta.cliente_nombre)} | 
+                    Valor: {formatCurrency(typeof selectedVenta.valor_total === 'number' 
+                      ? selectedVenta.valor_total 
+                      : parseFloat(selectedVenta.valor_total?.toString() || '0') || 0)}
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowContractPreview(false)
+                    setSelectedVenta(null)
+                  }}
+                  className="text-white hover:text-blue-200 transition-colors p-2 rounded-full hover:bg-white hover:bg-opacity-10"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
             </div>
             
-            <div className="overflow-y-auto max-h-[calc(90vh-120px)]">
-              <ContratoPrevisualizador
-                contrato={{
-                  id: selectedVenta.id,
-                  numero: selectedVenta.numero_contrato || generateNextContractNumber(ventas),
-                  cliente_id: selectedVenta.id,
-                  clientes: {
+            {/* Contenido del Modal - Scrolleable */}
+            <div className="flex-1 overflow-y-auto bg-gray-100">
+              <div className="max-w-5xl mx-auto p-8">
+                <ContratoPrevisualizador
+                  contrato={{
                     id: selectedVenta.id,
-                    nombre: selectedVenta.cliente_nombre,
-                    rut: selectedVenta.cliente_rut,
-                    telefono: contractEditableData?.cliente_telefono || selectedVenta.cliente_telefono,
-                    correo: contractEditableData?.cliente_correo || selectedVenta.cliente_correo || '',
-                    direccion_entrega: contractEditableData?.direccion_entrega || selectedVenta.direccion_entrega,
+                    numero: selectedVenta.numero_contrato || generateNextContractNumber(ventas),
+                    cliente_id: selectedVenta.id,
+                    clientes: {
+                      id: selectedVenta.id,
+                      nombre: selectedVenta.cliente_nombre,
+                      rut: selectedVenta.cliente_rut,
+                      telefono: contractEditableData?.cliente_telefono || selectedVenta.cliente_telefono,
+                      correo: contractEditableData?.cliente_correo || selectedVenta.cliente_correo || selectedVenta.cliente_email || '',
+                      direccion_entrega: contractEditableData?.direccion_entrega || selectedVenta.direccion_entrega,
+                      created_at: new Date().toISOString(),
+                      updated_at: new Date().toISOString()
+                    },
+                    ejecutivo_id: selectedVenta.ejecutivo_id,
+                    ejecutivo_nombre: formatProperCase(cleanVendorName(selectedVenta.ejecutivo_nombre)),
+                    fecha_creacion: new Date().toISOString(),
+                    fecha_entrega: selectedVenta.fecha_entrega,
+                    valor_total: typeof selectedVenta.valor_total === 'string' 
+                      ? parseInt(selectedVenta.valor_total.replace(/\D/g, '')) 
+                      : selectedVenta.valor_total,
+                    modelo_casa: formatModeloCasa(selectedVenta.modelo_casa, undefined),
+                    detalle_materiales: selectedVenta.detalle_materiales || '',
+                    observaciones: selectedVenta.observaciones_crm || '',
+                    forma_pago: contractEditableData?.forma_pago || selectedVenta.forma_pago || 'efectivo',
+                    estado: 'borrador',
                     created_at: new Date().toISOString(),
                     updated_at: new Date().toISOString()
-                  },
-                  ejecutivo_id: selectedVenta.ejecutivo_id,
-                  ejecutivo_nombre: formatProperCase(cleanVendorName(selectedVenta.ejecutivo_nombre)),
-                  fecha_creacion: new Date().toISOString(),
-                  fecha_entrega: selectedVenta.fecha_entrega,
-                  valor_total: typeof selectedVenta.valor_total === 'string' 
-                    ? parseInt(selectedVenta.valor_total.replace(/\D/g, '')) 
-                    : selectedVenta.valor_total,
-                  modelo_casa: formatModeloCasa(selectedVenta.modelo_casa, undefined),
-                  detalle_materiales: selectedVenta.detalle_materiales || '',
-                  observaciones: selectedVenta.observaciones_crm || '',
-                  forma_pago: contractEditableData?.forma_pago || selectedVenta.forma_pago || 'efectivo',
-                  estado: 'borrador',
-                  created_at: new Date().toISOString(),
-                  updated_at: new Date().toISOString()
-                }}
-                user={user}
-              />
+                  }}
+                  user={user}
+                />
+              </div>
             </div>
             
-            <div className="p-6 border-t border-gray-200 bg-gray-50 flex gap-3">
-              <button
-                onClick={() => setShowContractPreview(false)}
-                className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-all"
-              >
-                Cerrar Vista Previa
-              </button>
-              <button
-                onClick={() => {
-                  setShowContractPreview(false)
-                  // Volver al modal de confirmación o proceder con generación
-                }}
-                className="flex-1 px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium transition-all"
-              >
-                Continuar con Generación
-              </button>
+            {/* Footer con botones */}
+            <div className="bg-white border-t border-gray-200 p-6 flex-shrink-0">
+              <div className="max-w-5xl mx-auto flex justify-between items-center gap-4">
+                <button
+                  onClick={() => {
+                    setShowContractPreview(false)
+                    setSelectedVenta(null)
+                  }}
+                  className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-all flex items-center gap-2"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Volver
+                </button>
+                
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => {
+                      setShowContractPreview(false)
+                      setContractEditableData(selectedVenta)
+                      handleStartEditing()
+                    }}
+                    className="px-6 py-2 border border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 font-medium transition-all flex items-center gap-2"
+                  >
+                    <Edit3 className="h-4 w-4" />
+                    Editar Datos
+                  </button>
+                  
+                  <button
+                    onClick={() => handleGenerarContrato(selectedVenta)}
+                    disabled={generatingContractId === selectedVenta.id}
+                    className={`px-6 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
+                      generatingContractId === selectedVenta.id
+                        ? 'bg-blue-400 text-white cursor-not-allowed'
+                        : 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm hover:shadow'
+                    }`}
+                  >
+                    {generatingContractId === selectedVenta.id ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Generando...
+                      </>
+                    ) : (
+                      <>
+                        <FileText className="h-4 w-4" />
+                        Generar Contrato Final
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
