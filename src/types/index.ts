@@ -63,6 +63,7 @@ export interface CRMVenta {
   estado_crm: string;             // ⭐ Nueva: último estado de la bitácora
   observaciones_crm: string;      // ⭐ Nueva: última observación de la bitácora
   numero_contrato?: string;       // ⭐ Nueva: número de contrato del CRM (0 = sin contrato)
+  numero_contrato_temporal?: string; // ⭐ Nueva: número temporal correlativo para contratos sin número
 }
 
 export interface ContratoPDFData {

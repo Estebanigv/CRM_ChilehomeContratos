@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { 
   FileText, Plus, Settings, LogOut, Search, Filter, Download, Eye, Edit,
   Clock, CheckCircle, Send, Loader2, X, ChevronDown, AlertCircle,
@@ -9,6 +9,7 @@ import {
   Mail, MoreVertical, Save, AlertTriangle
 } from 'lucide-react'
 import ChileHomeLoader from './ChileHomeLoader'
+import ContratoPrevisualizador from './ContratoPrevisualizador'
 
 // Helper function to safely parse JSON responses
 async function safeParseJSON(response: Response) {
@@ -259,16 +260,37 @@ const cleanVendorName = (name: string): string => {
 const formatModeloCasa = (modelo: string | undefined, superficie: string | number | undefined): string => {
   if (!modelo) return 'No especificado'
   
-  let metros = ''
-  if (superficie) {
-    metros = ` ${superficie}m²`
+  // Si el modelo ya incluye "Casa de" y metros cuadrados, devolverlo tal como está
+  if (modelo.toLowerCase().includes('casa de') && modelo.includes('m²')) {
+    return modelo
   }
   
-  return `Casa modelo ${modelo}${metros}`
+  // Extraer el número de metros del modelo si viene en el formato "Modelo 36m²"
+  const metrosMatch = modelo.match(/(\d+)\s*m²/)
+  
+  if (metrosMatch) {
+    const metros = metrosMatch[1]
+    return `Casa de ${metros} m²`
+  }
+  
+  // Si no tiene formato completo, agregarlo con superficie si está disponible
+  if (superficie) {
+    return `Casa de ${superficie} m²`
+  }
+  
+  return `Casa ${modelo}`
 }
 
 // Función para validar si todos los campos requeridos están completos
 const validateContractData = (venta: any): { isComplete: boolean, missingFields: string[] } => {
+  // Check if venta is null or undefined
+  if (!venta) {
+    return {
+      isComplete: false,
+      missingFields: ['Datos de venta no disponibles']
+    }
+  }
+  
   const requiredFields = [
     { field: 'cliente_nombre', label: 'Nombre del cliente' },
     { field: 'cliente_rut', label: 'RUT del cliente' },
@@ -789,7 +811,7 @@ const DashboardOverview = ({
                       </td>
                       <td className="py-4 text-gray-600">
                         {cliente.email || (
-                          <span className="text-gray-400 italic">Falta correo</span>
+                          <span className="text-gray-400 ">Falta correo</span>
                         )}
                       </td>
                       <td className="py-4">
@@ -1207,12 +1229,31 @@ const ContratosSection = ({
           {ventasPaginadas.map((venta: any) => (
             <div key={venta.id} className="group bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-all duration-200">
               <div className="p-5">
-                {/* Línea superior: Nombre del cliente y estado */}
+                {/* Línea superior: Nombre del cliente, ID y estado */}
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex-1">
-                    <h3 className="text-lg font-bold text-gray-900 mb-1">
-                      {formatProperCase(venta.cliente_nombre)}
-                    </h3>
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="text-lg font-bold text-gray-900">
+                        {formatProperCase(venta.cliente_nombre)}
+                      </h3>
+                      <span className="text-xs font-mono bg-gray-100 text-gray-600 px-2 py-1 rounded">
+                        ID: {venta.id}
+                      </span>
+                    </div>
+                    {/* Mostrar número de contrato debajo del nombre */}
+                    {venta.numero_contrato && venta.numero_contrato !== '0' ? (
+                      <p className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-md inline-block">
+                        📋 Contrato: {venta.numero_contrato}
+                      </p>
+                    ) : venta.numero_contrato_temporal ? (
+                      <p className="text-xs font-medium text-orange-600 bg-orange-50 px-2 py-1 rounded-md inline-block">
+                        📝 Generar contrato: {venta.numero_contrato_temporal}
+                      </p>
+                    ) : (
+                      <p className="text-xs font-medium text-gray-600 bg-gray-50 px-2 py-1 rounded-md inline-block">
+                        📝 Pendiente de contrato
+                      </p>
+                    )}
                   </div>
                   <span className={`inline-flex items-center px-3 py-1 rounded-lg text-xs font-medium border ${getEstadoStyle(venta.estado_crm || '')}`}>
                     {venta.estado_crm || 'Pendiente'}
@@ -1277,23 +1318,7 @@ const ContratosSection = ({
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => {
-                        // Si la venta no tiene número de contrato asignado, asignarlo automáticamente
-                        let ventaConNumero = venta
-                        if (!venta.numero_contrato || venta.numero_contrato === '0') {
-                          const numeroContrato = generateNextContractNumber(ventas)
-                          
-                          // Actualizar venta en el estado local
-                          ventaConNumero = { ...venta, numero_contrato: numeroContrato }
-                          setVentas(prevVentas => 
-                            prevVentas.map(v => 
-                              v.id === venta.id 
-                                ? ventaConNumero
-                                : v
-                            )
-                          )
-                        }
-                        
-                        setSelectedVenta(ventaConNumero)
+                        setSelectedVenta(venta)
                         setShowDetallesModal(true)
                       }}
                       className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors text-xs font-medium"
@@ -1504,6 +1529,9 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
   const [editingSection, setEditingSection] = useState<string | null>(null)
   const [editedVenta, setEditedVenta] = useState<any>(null)
   const [showContractConfirmation, setShowContractConfirmation] = useState(false)
+  const [showContractPreview, setShowContractPreview] = useState(false)
+  const [contractEditableData, setContractEditableData] = useState<any>(null)
+  const [showMissingFieldsEditor, setShowMissingFieldsEditor] = useState(false)
 
   // Los datos ya vienen filtrados del API cuando se aplican fechas
   // Solo usar filtrado cliente cuando no hay fechas (para datos iniciales sin filtro)
@@ -1598,8 +1626,22 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
     }
   }
 
+  // Validación memoizada para optimizar renderizado
+  const currentValidation = useMemo(() => {
+    const venta = editedVenta || selectedVenta
+    if (!venta) {
+      return { isComplete: false, missingFields: ['No hay datos de venta seleccionados'] }
+    }
+    return validateContractData(venta)
+  }, [editedVenta, selectedVenta])
+
+  // Función optimizada para manejar cambios en campos editables
+  const handleFieldChange = useCallback((field: string, value: string) => {
+    setEditedVenta(prev => ({ ...prev, [field]: value }))
+  }, [])
+
   // Función auxiliar para renderizar campo editable
-  const renderEditableField = (
+  const renderEditableField = useCallback((
     label: string, 
     field: string, 
     currentValue: any, 
@@ -1618,7 +1660,7 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
           <input
             type={type}
             value={editedVenta?.[field] || ''}
-            onChange={(e) => setEditedVenta(prev => ({ ...prev, [field]: e.target.value }))}
+            onChange={(e) => handleFieldChange(field, e.target.value)}
             className="w-full text-sm font-medium text-gray-900 bg-white border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             placeholder={`Ingrese ${label.toLowerCase()}`}
           />
@@ -1629,7 +1671,7 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
         )}
       </div>
     )
-  }
+  }, [editedVenta, isEditingFields, editingSection, handleFieldChange])
 
   // Función para renderizar header de sección con botón editar
   const renderSectionHeader = (title: string, icon: any, sectionKey: string) => {
@@ -2380,7 +2422,7 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
                 <div className="bg-gray-50 rounded-lg p-4">
                   <h4 className="font-medium text-gray-900 mb-2">Detalles de la Venta</h4>
                   <div className="space-y-2 text-sm">
-                    <p><span className="font-medium">Vendedor:</span> {cleanVendorName(selectedVenta.ejecutivo_nombre)}</p>
+                    <p><span className="font-medium">Vendedor:</span> {formatProperCase(cleanVendorName(selectedVenta.ejecutivo_nombre))}</p>
                     <p><span className="font-medium">Valor:</span> {
                       typeof selectedVenta.valor_total === 'number' 
                         ? formatCurrency(selectedVenta.valor_total)
@@ -2534,10 +2576,8 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
                       <div>
                         <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Número de Contrato</p>
                         {(() => {
-                          const numeroCorrelativo = generateNextContractNumber(ventas)
-                          
                           // Si ya tiene número de contrato Y el estado indica que el contrato físico fue generado
-                          if (selectedVenta.numero_contrato && (
+                          if (selectedVenta.numero_contrato && selectedVenta.numero_contrato !== '0' && (
                             selectedVenta.estado_crm?.toLowerCase().includes('contrato generado') ||
                             selectedVenta.estado_crm?.toLowerCase().includes('entrega ok') ||
                             selectedVenta.estado_crm?.toLowerCase().includes('completado')
@@ -2549,7 +2589,7 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
                             )
                           }
                           // Si ya tiene número asignado PERO el contrato físico aún no se ha generado
-                          else if (selectedVenta.numero_contrato) {
+                          else if (selectedVenta.numero_contrato && selectedVenta.numero_contrato !== '0') {
                             return (
                               <p className="text-sm font-bold text-orange-600 font-mono bg-orange-50 px-3 py-2 rounded-lg border border-orange-200 flex items-center gap-2">
                                 <Clock className="h-4 w-4" />
@@ -2557,18 +2597,40 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
                               </p>
                             )
                           }
-                          // Si no tiene número, mostrar el que se asignará correlativamente
+                          // Si no tiene número, mostrar que aún no se ha asignado
                           else {
                             return (
-                              <p className="text-sm font-medium text-amber-600 bg-amber-50 px-3 py-2 rounded-lg border border-amber-200 flex items-center gap-2">
-                                <Clock className="h-4 w-4" />
-                                Se asignará: {numeroCorrelativo}
+                              <p className="text-sm font-medium text-gray-500 bg-gray-50 px-3 py-2 rounded-lg border border-gray-200 flex items-center gap-2">
+                                <AlertCircle className="h-4 w-4" />
+                                Sin asignar
                               </p>
                             )
                           }
                         })()}
                       </div>
-                      {renderEditableField("Tipo de Pago", "tipo_pago", selectedVenta.tipo_pago, "documentacion")}
+                      {/* Selector de Forma de Pago personalizado */}
+                      <div>
+                        <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Forma de Pago</p>
+                        {((isEditingFields && editingSection === 'all') || editingSection === 'documentacion') ? (
+                          <select
+                            value={editedVenta?.forma_pago || selectedVenta.forma_pago || ""}
+                            onChange={(e) => setEditedVenta(prev => ({ ...prev, forma_pago: e.target.value }))}
+                            className="w-full text-sm font-medium text-gray-900 bg-white border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          >
+                            <option value="" disabled className="text-gray-500">Seleccionar forma de pago</option>
+                            <option value="efectivo" className="text-gray-900">Efectivo</option>
+                            <option value="transferencia" className="text-gray-900">Transferencia</option>
+                          </select>
+                        ) : (
+                          <p className="text-sm font-medium text-gray-900">
+                            {selectedVenta.forma_pago ? (
+                              <span className="capitalize">{selectedVenta.forma_pago}</span>
+                            ) : (
+                              <span className="text-orange-600">⚠ Sin información</span>
+                            )}
+                          </p>
+                        )}
+                      </div>
                       {renderEditableField("Descuento Aplicado (%)", "descuento", selectedVenta.descuento, "documentacion", "number")}
                     </div>
                   </div>
@@ -2657,7 +2719,7 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
                         />
                       ) : (
                         <div className="text-sm text-gray-700 bg-gray-50 p-3 rounded-lg min-h-[80px]">
-                          {selectedVenta.observaciones_crm || <span className="text-gray-400 italic">Sin observaciones registradas</span>}
+                          {selectedVenta.observaciones_crm || <span className="text-gray-400 ">Sin observaciones registradas</span>}
                         </div>
                       )}
                     </div>
@@ -2668,7 +2730,7 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
 
             {/* Panel de validación */}
             {selectedVenta && (() => {
-              const validation = validateContractData(editedVenta || selectedVenta)
+              const validation = currentValidation
               return (
                 <div className="flex-shrink-0 px-6 py-4 bg-gray-50 border-t border-gray-200">
                   <div className="flex items-center justify-between mb-3">
@@ -2732,7 +2794,7 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
             {/* Footer con acciones mejorado */}
             <div className="flex-shrink-0 bg-white px-6 py-4 border-t border-gray-200">
               {selectedVenta && (() => {
-                const validation = validateContractData(editedVenta || selectedVenta)
+                const validation = currentValidation
                 return (
                   <div className="flex flex-wrap gap-3">
                     {/* Botón llamar cliente - siempre visible */}
@@ -2749,12 +2811,16 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
                     {/* Botón principal basado en estado */}
                     {validation.isComplete ? (
                       <button
-                        onClick={() => setShowContractConfirmation(true)}
+                        onClick={() => {
+                          setContractEditableData(selectedVenta)
+                          setShowMissingFieldsEditor(false)
+                          setShowContractConfirmation(true)
+                        }}
                         disabled={generatingContractId === selectedVenta.id}
                         className={`flex-1 px-4 py-2.5 rounded-lg font-medium transition-all flex items-center justify-center gap-2 ${
                           generatingContractId === selectedVenta.id
-                            ? 'bg-purple-100 text-purple-600 cursor-not-allowed' 
-                            : 'bg-purple-600 text-white hover:bg-purple-700 shadow-sm hover:shadow'
+                            ? 'bg-slate-100 text-slate-600 cursor-not-allowed' 
+                            : 'bg-slate-700 text-white hover:bg-slate-800 shadow-sm hover:shadow'
                         }`}
                       >
                         {generatingContractId === selectedVenta.id ? (
@@ -2802,11 +2868,11 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg max-w-2xl w-full shadow-2xl">
             {/* Header */}
-            <div className="bg-gradient-to-r from-purple-600 to-purple-700 px-6 py-4 rounded-t-lg">
+            <div className="bg-gradient-to-r from-slate-700 to-slate-800 px-6 py-4 rounded-t-lg">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-xl font-semibold text-white">Confirmar Generación de Contrato</h3>
-                  <p className="text-purple-100 text-sm mt-1">Último paso antes de generar el documento</p>
+                  <p className="text-slate-200 text-sm mt-1">Último paso antes de generar el documento</p>
                 </div>
                 <button
                   onClick={() => setShowContractConfirmation(false)}
@@ -2825,7 +2891,8 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
                   <CheckCircle className="h-5 w-5 text-green-500" />
                   Información del Contrato Validada
                 </h4>
-                <div className="grid grid-cols-2 gap-4 text-sm">
+                {/* Información principal siempre visible y limpia */}
+                <div className="grid grid-cols-2 gap-4 text-sm mb-4">
                   <div>
                     <span className="text-gray-600">Cliente:</span>
                     <span className="ml-2 font-medium text-gray-900">{selectedVenta.cliente_nombre}</span>
@@ -2834,6 +2901,26 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
                     <span className="text-gray-600">RUT:</span>
                     <span className="ml-2 font-medium text-gray-900">{formatRUT(selectedVenta.cliente_rut)}</span>
                   </div>
+                  
+                  {/* Solo mostrar campos existentes */}
+                  {(contractEditableData?.cliente_telefono || selectedVenta.cliente_telefono) && (
+                    <div>
+                      <span className="text-gray-600">Teléfono:</span>
+                      <span className="ml-2 font-medium text-gray-900">
+                        {formatPhone(contractEditableData?.cliente_telefono || selectedVenta.cliente_telefono)}
+                      </span>
+                    </div>
+                  )}
+                  
+                  {(contractEditableData?.cliente_correo || selectedVenta.cliente_correo) && (
+                    <div>
+                      <span className="text-gray-600">Correo:</span>
+                      <span className="ml-2 font-medium text-gray-900">
+                        {contractEditableData?.cliente_correo || selectedVenta.cliente_correo}
+                      </span>
+                    </div>
+                  )}
+                  
                   <div>
                     <span className="text-gray-600">Modelo:</span>
                     <span className="ml-2 font-medium text-gray-900">{formatModeloCasa(selectedVenta.modelo_casa, selectedVenta.superficie)}</span>
@@ -2847,15 +2934,127 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
                       }
                     </span>
                   </div>
+                  
+                  {(contractEditableData?.forma_pago || selectedVenta.forma_pago) && (
+                    <div>
+                      <span className="text-gray-600">Forma de Pago:</span>
+                      <span className="ml-2 font-medium text-gray-900 capitalize">
+                        {contractEditableData?.forma_pago || selectedVenta.forma_pago}
+                      </span>
+                    </div>
+                  )}
+                  
                   <div>
                     <span className="text-gray-600">Ejecutivo:</span>
-                    <span className="ml-2 font-medium text-gray-900">{cleanVendorName(selectedVenta.ejecutivo_nombre)}</span>
+                    <span className="ml-2 font-medium text-gray-900">{formatProperCase(cleanVendorName(selectedVenta.ejecutivo_nombre))}</span>
                   </div>
+                  
                   <div>
-                    <span className="text-gray-600">Teléfono:</span>
-                    <span className="ml-2 font-medium text-gray-900">{formatPhone(selectedVenta.cliente_telefono)}</span>
+                    <span className="text-gray-600">Fecha de Entrega:</span>
+                    <span className="ml-2 font-medium text-blue-600">{formatDate(selectedVenta.fecha_entrega)}</span>
                   </div>
+                  
+                  {selectedVenta.direccion_entrega && (
+                    <div className="col-span-2">
+                      <span className="text-gray-600">Dirección de Entrega:</span>
+                      <span className="ml-2 font-medium text-gray-900">{formatProperCase(selectedVenta.direccion_entrega)}</span>
+                    </div>
+                  )}
                 </div>
+
+                {/* Botón para completar datos faltantes */}
+                {(() => {
+                  // Usar los datos más actualizados (combinando contractEditableData y selectedVenta)
+                  const datosActuales = {
+                    cliente_telefono: contractEditableData?.cliente_telefono || selectedVenta.cliente_telefono,
+                    cliente_correo: contractEditableData?.cliente_correo || selectedVenta.cliente_correo,
+                    forma_pago: contractEditableData?.forma_pago || selectedVenta.forma_pago,
+                    direccion_entrega: contractEditableData?.direccion_entrega || selectedVenta.direccion_entrega
+                  }
+                  
+                  const faltanDatos = !datosActuales.cliente_telefono || 
+                                     !datosActuales.cliente_correo || 
+                                     !datosActuales.forma_pago ||
+                                     !datosActuales.direccion_entrega
+                  
+                  if (!faltanDatos) return null
+                  
+                  return (
+                    <div className="border-t border-gray-200 pt-4">
+                      {!showMissingFieldsEditor ? (
+                        <button
+                          onClick={() => {
+                            setContractEditableData(selectedVenta)
+                            setShowMissingFieldsEditor(true)
+                          }}
+                          className="w-full px-4 py-3 border-2 border-dashed border-amber-300 text-amber-700 rounded-lg hover:border-amber-400 hover:bg-amber-50 transition-all text-sm font-medium flex items-center justify-center gap-2"
+                        >
+                          <AlertTriangle className="w-4 h-4" />
+                          Completar información faltante
+                        </button>
+                      ) : (
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between mb-3">
+                            <h5 className="text-sm font-semibold text-gray-900">Completar datos:</h5>
+                            <button
+                              onClick={() => setShowMissingFieldsEditor(false)}
+                              className="text-gray-400 hover:text-gray-600"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                          
+                          {!selectedVenta.cliente_telefono && (
+                            <div>
+                              <label className="block text-xs text-gray-600 mb-1">Teléfono</label>
+                              <input
+                                type="tel"
+                                placeholder="+56 9 1234 5678"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                onChange={(e) => setContractEditableData({...contractEditableData || selectedVenta, cliente_telefono: e.target.value})}
+                              />
+                            </div>
+                          )}
+                          
+                          {!selectedVenta.cliente_correo && (
+                            <div>
+                              <label className="block text-xs text-gray-600 mb-1">Correo electrónico</label>
+                              <input
+                                type="email"
+                                placeholder="cliente@ejemplo.com"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                onChange={(e) => setContractEditableData({...contractEditableData || selectedVenta, cliente_correo: e.target.value})}
+                              />
+                            </div>
+                          )}
+                          
+                          <div>
+                            <label className="block text-xs text-gray-600 mb-1">Forma de pago</label>
+                            <select
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              onChange={(e) => setContractEditableData({...contractEditableData || selectedVenta, forma_pago: e.target.value})}
+                              value={contractEditableData?.forma_pago || selectedVenta.forma_pago || ""}
+                            >
+                              <option value="" disabled className="text-gray-500">Seleccionar forma de pago</option>
+                              <option value="efectivo" className="text-gray-900">Efectivo</option>
+                              <option value="transferencia" className="text-gray-900">Transferencia</option>
+                            </select>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
+                
+
+                {/* Observaciones del CRM si existen */}
+                {selectedVenta.observaciones_crm && selectedVenta.observaciones_crm.trim() !== '' && (
+                  <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                    <h5 className="text-sm font-semibold text-blue-900 mb-2">Observaciones del CRM:</h5>
+                    <p className="text-sm text-blue-800">{selectedVenta.observaciones_crm}</p>
+                  </div>
+                )}
+                
               </div>
 
               {/* Opciones de envío */}
@@ -2869,13 +3068,13 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
                     <input 
                       type="checkbox" 
                       defaultChecked 
-                      className="rounded border-gray-300 text-purple-600 focus:ring-purple-500" 
+                      className="rounded border-gray-300 text-slate-600 focus:ring-slate-500" 
                     />
                     <div className="flex items-center gap-2">
                       <Mail className="h-4 w-4 text-blue-500" />
-                      <span className="text-sm font-medium">Enviar por correo electrónico</span>
-                      <span className="text-xs text-gray-500">
-                        ({selectedVenta.cliente_email || 'Email no disponible'})
+                      <span className="text-sm font-medium text-gray-900">Enviar por correo electrónico</span>
+                      <span className="text-xs text-gray-700">
+                        {selectedVenta.cliente_email || 'Email no disponible'}
                       </span>
                     </div>
                   </label>
@@ -2884,13 +3083,13 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
                     <input 
                       type="checkbox" 
                       defaultChecked 
-                      className="rounded border-gray-300 text-purple-600 focus:ring-purple-500" 
+                      className="rounded border-gray-300 text-slate-600 focus:ring-slate-500" 
                     />
                     <div className="flex items-center gap-2">
                       <MessageSquare className="h-4 w-4 text-green-500" />
-                      <span className="text-sm font-medium">Enviar por WhatsApp</span>
-                      <span className="text-xs text-gray-500">
-                        ({formatPhone(selectedVenta.cliente_telefono)})
+                      <span className="text-sm font-medium text-gray-900">Enviar por WhatsApp</span>
+                      <span className="text-xs text-gray-700">
+                        {formatPhone(selectedVenta.cliente_telefono)}
                       </span>
                     </div>
                   </label>
@@ -2899,13 +3098,13 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
                     <input 
                       type="checkbox" 
                       defaultChecked 
-                      className="rounded border-gray-300 text-purple-600 focus:ring-purple-500" 
+                      className="rounded border-gray-300 text-slate-600 focus:ring-slate-500" 
                     />
                     <div className="flex items-center gap-2">
                       <Users className="h-4 w-4 text-purple-500" />
-                      <span className="text-sm font-medium">Notificar al ejecutivo</span>
-                      <span className="text-xs text-gray-500">
-                        ({cleanVendorName(selectedVenta.ejecutivo_nombre)})
+                      <span className="text-sm font-medium text-gray-900">Notificar al ejecutivo</span>
+                      <span className="text-xs text-gray-700">
+                        {formatProperCase(cleanVendorName(selectedVenta.ejecutivo_nombre))}
                       </span>
                     </div>
                   </label>
@@ -2941,8 +3140,7 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
                 
                 <button
                   onClick={() => {
-                    // Mostrar vista previa antes de generar
-                    alert('Vista previa del contrato (por implementar)\n\nEl contrato se guardará en:\n• Carpeta: /contratos/generados\n• Nombre: Contrato_' + selectedVenta.cliente_nombre.replace(/\s/g, '_') + '_' + new Date().toISOString().split('T')[0] + '.pdf')
+                    setShowContractPreview(true)
                   }}
                   className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-all flex items-center justify-center gap-2"
                 >
@@ -2954,9 +3152,17 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
                   onClick={async () => {
                     setShowContractConfirmation(false)
                     
+                    // Combinar datos originales con datos editables
+                    const datosFinales = {
+                      ...selectedVenta,
+                      cliente_telefono: contractEditableData?.cliente_telefono || selectedVenta.cliente_telefono,
+                      cliente_correo: contractEditableData?.cliente_correo || selectedVenta.cliente_correo,
+                      forma_pago: contractEditableData?.forma_pago || selectedVenta.forma_pago,
+                    }
+                    
                     // Generar número de contrato y preparar información
-                    const numeroContrato = selectedVenta.numero_contrato || generateNextContractNumber(ventas)
-                    const fileName = `Contrato_${numeroContrato}_${selectedVenta.cliente_nombre.replace(/\s/g, '_')}.pdf`
+                    const numeroContrato = datosFinales.numero_contrato || generateNextContractNumber(ventas)
+                    const fileName = `Contrato_${numeroContrato}_${datosFinales.cliente_nombre.replace(/\s/g, '_')}.pdf`
                     setNotification({
                       type: 'success',
                       message: `Generando contrato ${numeroContrato}...\nSe guardará como: ${fileName}`
@@ -2969,15 +3175,15 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
                     setTimeout(() => {
                       setNotification({
                         type: 'success',
-                        message: `Contrato generado exitosamente!\n📁 Guardado en: /contratos/${fileName}\n📧 Enviado por: Email, WhatsApp\n👨‍💼 Notificado: ${cleanVendorName(selectedVenta.ejecutivo_nombre)}`
+                        message: `Contrato generado exitosamente!\n📁 Guardado en: /contratos/${fileName}\n📧 Enviado por: Email, WhatsApp\n👨‍💼 Notificado: ${cleanVendorName(datosFinales.ejecutivo_nombre)}`
                       })
                     }, 2000)
                   }}
                   disabled={generatingContractId === selectedVenta.id}
                   className={`flex-1 px-4 py-2.5 rounded-lg font-medium transition-all flex items-center justify-center gap-2 ${
                     generatingContractId === selectedVenta.id
-                      ? 'bg-purple-100 text-purple-600 cursor-not-allowed' 
-                      : 'bg-purple-600 text-white hover:bg-purple-700 shadow-sm hover:shadow'
+                      ? 'bg-slate-100 text-slate-600 cursor-not-allowed' 
+                      : 'bg-slate-700 text-white hover:bg-slate-800 shadow-sm hover:shadow'
                   }`}
                 >
                   {generatingContractId === selectedVenta.id ? (
@@ -2993,6 +3199,78 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Vista Previa del Contrato */}
+      {showContractPreview && selectedVenta && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h3 className="text-xl font-bold text-gray-900">
+                Vista Previa del Contrato
+              </h3>
+              <button
+                onClick={() => setShowContractPreview(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+            
+            <div className="overflow-y-auto max-h-[calc(90vh-120px)]">
+              <ContratoPrevisualizador
+                contrato={{
+                  id: selectedVenta.id,
+                  numero: selectedVenta.numero_contrato || generateNextContractNumber(ventas),
+                  cliente_id: selectedVenta.id,
+                  clientes: {
+                    id: selectedVenta.id,
+                    nombre: selectedVenta.cliente_nombre,
+                    rut: selectedVenta.cliente_rut,
+                    telefono: contractEditableData?.cliente_telefono || selectedVenta.cliente_telefono,
+                    correo: contractEditableData?.cliente_correo || selectedVenta.cliente_correo || '',
+                    direccion_entrega: contractEditableData?.direccion_entrega || selectedVenta.direccion_entrega,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                  },
+                  ejecutivo_id: selectedVenta.ejecutivo_id,
+                  ejecutivo_nombre: formatProperCase(cleanVendorName(selectedVenta.ejecutivo_nombre)),
+                  fecha_creacion: new Date().toISOString(),
+                  fecha_entrega: selectedVenta.fecha_entrega,
+                  valor_total: typeof selectedVenta.valor_total === 'string' 
+                    ? parseInt(selectedVenta.valor_total.replace(/\D/g, '')) 
+                    : selectedVenta.valor_total,
+                  modelo_casa: formatModeloCasa(selectedVenta.modelo_casa, undefined),
+                  detalle_materiales: selectedVenta.detalle_materiales || '',
+                  observaciones: selectedVenta.observaciones_crm || '',
+                  forma_pago: contractEditableData?.forma_pago || selectedVenta.forma_pago || 'efectivo',
+                  estado: 'borrador',
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString()
+                }}
+                user={user}
+              />
+            </div>
+            
+            <div className="p-6 border-t border-gray-200 bg-gray-50 flex gap-3">
+              <button
+                onClick={() => setShowContractPreview(false)}
+                className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-all"
+              >
+                Cerrar Vista Previa
+              </button>
+              <button
+                onClick={() => {
+                  setShowContractPreview(false)
+                  // Volver al modal de confirmación o proceder con generación
+                }}
+                className="flex-1 px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium transition-all"
+              >
+                Continuar con Generación
+              </button>
             </div>
           </div>
         </div>

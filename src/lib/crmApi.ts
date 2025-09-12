@@ -198,6 +198,70 @@ class CRMApi {
     }
   }
 
+  // Función para generar el siguiente número correlativo
+  private generarSiguienteNumeroContrato(ventasExistentes: CRMVenta[]): string {
+    // Obtener todos los números de contrato existentes que no sean "0"
+    const numerosExistentes = ventasExistentes
+      .map(v => v.numero_contrato)
+      .filter(num => num && num !== '0')
+      .map(num => {
+        // Extraer el número del formato "CONT-2024-XXX"
+        const match = num.match(/CONT-(\d{4})-(\d+)/)
+        return match ? parseInt(match[2]) : 0
+      })
+      .filter(num => num > 0)
+    
+    // Encontrar el número más alto y sumar 1
+    const siguienteNumero = numerosExistentes.length > 0 ? Math.max(...numerosExistentes) + 1 : 1
+    const year = new Date().getFullYear()
+    
+    console.log(`🔢 Generando número correlativo:`, {
+      numeros_existentes: numerosExistentes,
+      siguiente_numero: siguienteNumero,
+      formato_final: `CONT-${year}-${siguienteNumero.toString().padStart(3, '0')}`
+    })
+    
+    return `CONT-${year}-${siguienteNumero.toString().padStart(3, '0')}`
+  }
+
+  // Función para asignar números correlativos a contratos sin número (solo para visualización)
+  private asignarNumerosCorrelativos(ventas: CRMVenta[]): void {
+    // Separar contratos con número y sin número
+    const contratosConNumero = ventas.filter(v => v.numero_contrato && v.numero_contrato !== '0')
+    const contratosSinNumero = ventas.filter(v => !v.numero_contrato || v.numero_contrato === '0')
+    
+    console.log(`📊 Análisis de contratos:`, {
+      total: ventas.length,
+      con_numero: contratosConNumero.length,
+      sin_numero: contratosSinNumero.length
+    })
+    
+    // Para cada contrato sin número, generar uno correlativo
+    let contadorTemporal = this.obtenerProximoNumeroCorrelativo(contratosConNumero)
+    
+    contratosSinNumero.forEach((venta, index) => {
+      const year = new Date().getFullYear()
+      venta.numero_contrato_temporal = `CONT-${year}-${(contadorTemporal + index).toString().padStart(3, '0')}`
+      console.log(`🔢 Número temporal asignado:`, {
+        cliente: venta.cliente_nombre,
+        numero_temporal: venta.numero_contrato_temporal
+      })
+    })
+  }
+
+  // Obtener el próximo número correlativo basado en los existentes
+  private obtenerProximoNumeroCorrelativo(contratosConNumero: CRMVenta[]): number {
+    const numerosExistentes = contratosConNumero
+      .map(v => v.numero_contrato)
+      .map(num => {
+        const match = num.match(/CONT-(\d{4})-(\d+)/)
+        return match ? parseInt(match[2]) : 0
+      })
+      .filter(num => num > 0)
+    
+    return numerosExistentes.length > 0 ? Math.max(...numerosExistentes) + 1 : 1
+  }
+
   async obtenerVentas(ejecutivoId?: string, fechaInicio?: string, fechaFin?: string): Promise<CRMVenta[]> {
     console.log('🔥 CRM API - Obteniendo ventas desde septiembre 2024 en adelante') // Debug
     
@@ -247,6 +311,9 @@ class CRMApi {
         const ventas = data.inf.map(venta => this.mapearVentaCRM(venta))
           .filter(venta => !ejecutivoId || venta.ejecutivo_id === ejecutivoId)
         
+        // Para los contratos sin número, asignar números correlativos (solo para visualización)
+        this.asignarNumerosCorrelativos(ventas)
+        
         // Debug: Estados únicos del CRM
         const estadosUnicos = [...new Set(ventas.map(v => v.estado_crm))]
         console.log('🔍 Estados únicos encontrados en CRM:', estadosUnicos)
@@ -278,6 +345,9 @@ class CRMApi {
       // Solo usar mock si NO hay credenciales
       console.log('📝 Using mock data (CRM connection failed, no credentials)')
       const mockVentas = this.getMockVentasExpandido()
+      
+      // Asignar números temporales también a los datos mock
+      this.asignarNumerosCorrelativos(mockVentas)
       
       // Filtrar mock por fechas si se proporcionan
       if (fechaInicio && fechaFin) {
@@ -322,6 +392,37 @@ class CRMApi {
         .replace(/&ordm;/g, 'º')  // Agregado para ordinales masculinos
     }
 
+    // 🔍 DEBUG: Verificación completa de integridad de datos
+    const estado = ventaCRM.ref_est_nom || 'Sin estado'
+    const numeroContrato = ventaCRM.ref_ins_ord || '0'
+    
+    // Log completo del registro CRM para verificar integridad
+    console.log(`🔍 REGISTRO CRM COMPLETO [ID: ${ventaCRM.ref_id}]:`, {
+      id: ventaCRM.ref_id,
+      nombre: ventaCRM.ref_nom,
+      rut: ventaCRM.ref_run,
+      telefono: ventaCRM.ref_fon,
+      direccion: ventaCRM.ref_dir,
+      comuna: ventaCRM.ref_com,
+      region: ventaCRM.ref_reg,
+      fecha_creacion: ventaCRM.ref_cre_fec,
+      hora_creacion: ventaCRM.ref_cre_hor,
+      fecha_entrega: ventaCRM.ref_ins_fec_age,
+      vendedor: ventaCRM.ref_usu_nom,
+      supervisor: ventaCRM.ref_usu_sup_nom,
+      estado: estado,
+      numero_contrato: numeroContrato,
+      precio_final: ventaCRM.ref_pre_fin,
+      pago_final: ventaCRM.ref_pag_fin,
+      metodo_pago: ventaCRM.ref_met_pag,
+      observaciones: ventaCRM.ref_est_bit,
+      marca: ventaCRM.ref_mar_nom,
+      tipo_producto: ventaCRM.ref_tip_nom
+    })
+    
+    // La regla correcta: si numero_contrato != "0", entonces TIENE contrato
+    const tieneContrato = numeroContrato !== '0' && numeroContrato !== '' && numeroContrato !== null
+
     return {
       id: ventaCRM.ref_id,
       cliente_nombre: ventaCRM.ref_nom,
@@ -340,10 +441,9 @@ class CRMApi {
         const preFin = parseInt(ventaCRM.ref_pre_fin) || 0
         const valor = pagFin || preFin || 0
         const valorLimpio = isNaN(valor) ? 0 : valor
-        const metraje = determinarMetrosCuadrados(valorLimpio, ventaCRM.ref_ins_ord || '0')
-        const marca = ventaCRM.ref_mar_nom || 'ConstruMaker'
-        return `Casa ${marca} ${metraje}` // Formato: Casa ConstruMaker 36m²
-      })(), // ⭐ MODELO - formato completo como en CRM
+        const metraje = determinarMetrosCuadrados(valorLimpio, numeroContrato)
+        return `Modelo ${metraje}` // Formato simplificado: Modelo 36m²
+      })(), // ⭐ MODELO - formato limpio sin duplicaciones
       detalle_materiales: `${ventaCRM.ref_est_bit || 'Sin detalle'} | Método pago: ${ventaCRM.ref_met_pag} | Subcategoría: ${ventaCRM.ref_usu_sub_nom}`, // ⭐ DETALLES COMPLETOS
       fecha_venta: (() => {
         const fechaFinal = `${ventaCRM.ref_cre_fec} ${ventaCRM.ref_cre_hor || ''}`.trim()
@@ -363,9 +463,9 @@ class CRMApi {
       ejecutivo_id: ventaCRM.ref_usu_nom, // ⭐ NOMBRE REAL del vendedor
       ejecutivo_nombre: `${ventaCRM.ref_usu_nom} (${ventaCRM.ref_usu_per_nom || 'Vendedor'})`, // ⭐ VENDEDOR COMPLETO
       supervisor_nombre: ventaCRM.ref_usu_sup_nom || 'Sin supervisor',
-      estado_crm: ventaCRM.ref_est_nom || 'Sin estado',
+      estado_crm: tieneContrato ? 'Contrato' : estado, // ⭐ Si tiene contrato, mostrar "Contrato", sino el estado original
       observaciones_crm: ventaCRM.ref_est_bit || 'Sin observaciones',
-      numero_contrato: ventaCRM.ref_ins_ord || '0' // ⭐ NÚMERO DE CONTRATO (0 = sin contrato generado)
+      numero_contrato: numeroContrato // ⭐ NÚMERO DE CONTRATO (0 = sin contrato generado)
     }
   }
 
@@ -416,8 +516,8 @@ class CRMApi {
       const dia = Math.floor(Math.random() * 30) + 1 // Día 1-30 de septiembre
       const fecha = new Date(2024, 8, dia) // Mes 8 = septiembre (0-indexed)
       
-      // Estados variados para simular casos reales
-      const estados = ['Validado', 'En proceso', 'Pendiente', 'Completado', 'Listo', 'Rechazado', 'Sin estado']
+      // Estados reales del CRM según la captura
+      const estados = ['Pre-ingreso', 'Validación', 'Producción', 'Confirmación de entrega', 'Planificación', 'Rechazo', 'Adquisiciones', 'Despacho', 'Entrega OK']
       const estadoIndex = i % estados.length
       
       ventasExpandidas.push({
@@ -428,7 +528,7 @@ class CRMApi {
         cliente_correo: `cliente${i + 4}@email.com`,
         direccion_entrega: `Dirección ${i + 4}, Comuna ${i % 5 + 1}, Santiago`,
         valor_total: Math.floor(Math.random() * 50000000) + 50000000, // Entre 50M y 100M
-        modelo_casa: `Modelo Casa ${i % 8 + 1} - ${60 + i * 5}m²`,
+        modelo_casa: `Modelo ${60 + i * 5}m²`,
         detalle_materiales: `Casa prefabricada, detalles del modelo ${i + 1}`,
         fecha_venta: fecha.toISOString(),
         fecha_entrega: new Date(fecha.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 días después
@@ -456,14 +556,14 @@ class CRMApi {
         cliente_correo: 'juan.perez@email.com',
         direccion_entrega: 'Av. Los Pinos 123, Las Condes, Santiago',
         valor_total: 85000000,
-        modelo_casa: 'Modelo Araucaria - 120m²',
+        modelo_casa: 'Modelo 120m²',
         detalle_materiales: 'Casa prefabricada de madera, 3 dormitorios, 2 baños, cocina americana, living-comedor, terraza 20m²',
         fecha_venta: new Date(2024, 8, 1).toISOString(), // 1 de septiembre 2024
         fecha_entrega: new Date(2024, 9, 1).toISOString().split('T')[0],
         ejecutivo_id: '1',
         ejecutivo_nombre: 'Juan Pérez',
         supervisor_nombre: 'Ana Supervisor',
-        estado_crm: 'Validado',
+        estado_crm: 'Validación', // Estado original del CRM, se convertirá a "Contrato" por la lógica
         observaciones_crm: 'Cliente confirmó especificaciones',
         numero_contrato: 'CONT-2024-001'
       },
@@ -475,14 +575,14 @@ class CRMApi {
         cliente_correo: 'maria.silva@email.com',
         direccion_entrega: 'Camino Rural 456, Puente Alto, Santiago',
         valor_total: 62000000,
-        modelo_casa: 'Modelo Copihue - 85m²',
+        modelo_casa: 'Modelo 85m²',
         detalle_materiales: 'Casa prefabricada de madera, 2 dormitorios, 1 baño, cocina, living-comedor, terraza 15m²',
         fecha_venta: new Date(2024, 8, 2).toISOString(), // 2 de septiembre 2024
         fecha_entrega: new Date(2024, 9, 2).toISOString().split('T')[0],
         ejecutivo_id: '2',
         ejecutivo_nombre: 'María González',
         supervisor_nombre: 'Luis Supervisor',
-        estado_crm: 'En proceso',
+        estado_crm: 'Pre-ingreso', // Estado original del CRM sin contrato
         observaciones_crm: 'Pendiente modificación de planos',
         numero_contrato: '0'
       },
@@ -494,14 +594,14 @@ class CRMApi {
         cliente_correo: 'carlos.morales@email.com',
         direccion_entrega: 'Parcela 15, Lote 8, Melipilla, Santiago',
         valor_total: 95000000,
-        modelo_casa: 'Modelo Roble - 140m²',
+        modelo_casa: 'Modelo 140m²',
         detalle_materiales: 'Casa prefabricada de madera, 4 dormitorios, 3 baños, cocina isla, living-comedor, estudio, terraza 25m²',
         fecha_venta: new Date(2024, 8, 3).toISOString(), // 3 de septiembre 2024
         fecha_entrega: new Date(2024, 9, 3).toISOString().split('T')[0],
         ejecutivo_id: '3',
         ejecutivo_nombre: 'Carlos Rodríguez',
         supervisor_nombre: 'Carmen Supervisor',
-        estado_crm: 'Completado',
+        estado_crm: 'Producción', // Estado original del CRM, se convertirá a "Contrato" por la lógica
         observaciones_crm: 'Cliente satisfecho, listo para entrega',
         numero_contrato: 'CONT-2024-002'
       }
