@@ -181,17 +181,27 @@ const formatProperCase = (text: string): string => {
 const getEstadoStyle = (estado: string) => {
   const estadoLower = estado?.toLowerCase() || ''
   
-  if (estadoLower.includes('contrato') || estadoLower.includes('completado') || estadoLower.includes('entrega ok')) {
-    return 'bg-green-100 text-green-800 border-green-200' // Verde para contratos/completados
+  // Estados según el flujo del proceso
+  if (estadoLower.includes('preingreso') || estadoLower.includes('pre-ingreso') || estadoLower.includes('ingreso')) {
+    return 'bg-blue-100 text-blue-800 border-blue-200' // Azul para preingreso
   }
-  if (estadoLower.includes('pre-ingreso') || estadoLower.includes('preingreso')) {
-    return 'bg-blue-100 text-blue-800 border-blue-200' // Azul para pre-ingreso
-  }
-  if (estadoLower.includes('validac')) {
+  if (estadoLower.includes('validacion') || estadoLower.includes('validación')) {
     return 'bg-yellow-100 text-yellow-800 border-yellow-200' // Amarillo para validación
   }
+  if (estadoLower.includes('contrato') && !estadoLower.includes('confirmacion')) {
+    return 'bg-purple-100 text-purple-800 border-purple-200' // Púrpura para contrato
+  }
+  if (estadoLower.includes('confirmacion') || estadoLower.includes('confirmación') || estadoLower.includes('entrega') && !estadoLower.includes('ok')) {
+    return 'bg-orange-100 text-orange-800 border-orange-200' // Naranja para confirmación entrega
+  }
+  if (estadoLower.includes('produccion') || estadoLower.includes('producción') || estadoLower.includes('fabrica')) {
+    return 'bg-indigo-100 text-indigo-800 border-indigo-200' // Índigo para producción
+  }
+  if (estadoLower.includes('entrega ok') || estadoLower.includes('completado') || estadoLower.includes('finalizado')) {
+    return 'bg-green-100 text-green-800 border-green-200' // Verde para entrega OK
+  }
   if (estadoLower.includes('rechaz') || estadoLower.includes('cancel')) {
-    return 'bg-red-100 text-red-800 border-red-200' // Rojo para rechazados
+    return 'bg-red-100 text-red-800 border-red-200' // Rojo para rechazados/cancelados
   }
   
   return 'bg-gray-100 text-gray-800 border-gray-200' // Gris por defecto
@@ -1074,18 +1084,20 @@ const ContratosSection = ({
       
       // Filtro por estado
       if (contractFilters.status !== 'todos') {
-        const estado = v.estado_crm?.toLowerCase() || 'pendiente'
+        const estado = v.estado_crm?.toLowerCase() || 'preingreso'
         switch (contractFilters.status) {
-          case 'pendiente':
-            return !v.numero_contrato || v.numero_contrato === '0' || estado.includes('pendiente')
-          case 'borrador':
-            return estado.includes('borrador') || estado.includes('draft')
-          case 'validado':
-            return estado.includes('validado') || estado.includes('validation')
-          case 'generado':
-            return estado.includes('generado') || estado.includes('contrato') || (v.numero_contrato && v.numero_contrato !== '0')
-          case 'enviado':
-            return estado.includes('enviado') || estado.includes('sent')
+          case 'preingreso':
+            return estado.includes('preingreso') || estado.includes('pre-ingreso') || estado.includes('ingreso')
+          case 'validacion':
+            return estado.includes('validacion') || estado.includes('validación') || estado.includes('validation')
+          case 'contrato':
+            return estado.includes('contrato') || estado.includes('contract')
+          case 'confirmacion_entrega':
+            return estado.includes('confirmacion') || estado.includes('confirmación') || estado.includes('entrega') || estado.includes('delivery')
+          case 'produccion':
+            return estado.includes('produccion') || estado.includes('producción') || estado.includes('production') || estado.includes('fabrica')
+          case 'entrega_ok':
+            return estado.includes('entrega ok') || estado.includes('completado') || estado.includes('finalizado') || estado.includes('completed')
         }
       }
       
@@ -1168,11 +1180,12 @@ const ContratosSection = ({
                 className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[160px]"
               >
                 <option value="todos">Todos los estados</option>
-                <option value="pendiente">Pendientes</option>
-                <option value="borrador">Borradores</option>
-                <option value="validado">Validados</option>
-                <option value="generado">Generados</option>
-                <option value="enviado">Enviados</option>
+                <option value="preingreso">Preingreso</option>
+                <option value="validacion">Validación</option>
+                <option value="contrato">Contrato</option>
+                <option value="confirmacion_entrega">Confirmación Entrega</option>
+                <option value="produccion">Producción</option>
+                <option value="entrega_ok">Entrega OK</option>
               </select>
             </div>
             

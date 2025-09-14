@@ -10,12 +10,19 @@
     "css:build": "tailwindcss -i ./src/app/globals.css -o ./public/styles.css --watch"
   },
   "dependencies": {
+    "@hookform/resolvers": "^3.9.1",
+    "@supabase/ssr": "^0.7.0",
+    "@supabase/supabase-js": "^2.57.2",
     "@types/react-datepicker": "^6.2.0",
     "daisyui": "^5.1.9",
+    "lucide-react": "^0.542.0",
     "next": "15.5.2",
+    "pdf-lib": "^1.17.1",
     "react": "19.1.0",
     "react-datepicker": "^8.7.0",
-    "react-dom": "19.1.0"
+    "react-dom": "19.1.0",
+    "react-hook-form": "^7.62.0",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
