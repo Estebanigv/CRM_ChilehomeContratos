@@ -1038,6 +1038,7 @@ const ContratosSection = ({
   setVentas,
   loading, 
   filtering,
+  setFiltering,
   error,
   fechaInicio,
   fechaFin,
@@ -1173,41 +1174,6 @@ const ContratosSection = ({
                 <option value="generado">Generados</option>
                 <option value="enviado">Enviados</option>
               </select>
-              
-              {/* Botones para filtros de contrato */}
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    console.log('Aplicando filtro de estado:', contractFilters.status)
-                    // Force re-render by updating pagination to reset to first page
-                    setPaginaActualVentas(1)
-                    // Force component update
-                    setFiltering(true)
-                    setTimeout(() => setFiltering(false), 200)
-                  }}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200 text-sm font-medium flex items-center gap-2"
-                  disabled={filtering}
-                  title="Aplicar filtros de estado"
-                >
-                  {filtering ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Filter className="h-4 w-4" />
-                  )}
-                  Aplicar
-                </button>
-                
-                <button
-                  onClick={() => {
-                    console.log('Restaurando filtros de estado')
-                    setContractFilters({ status: 'todos' })
-                  }}
-                  className="px-4 py-2 bg-gray-100 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-200 transition-colors duration-200 text-sm font-medium"
-                  title="Restaurar filtros a valores por defecto"
-                >
-                  Restaurar
-                </button>
-              </div>
             </div>
             
             {/* Botón de actualización CRM con mejor espacio */}
@@ -2665,6 +2631,7 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
                   setVentas={setVentas}
                   loading={loading}
                   filtering={filtering}
+                  setFiltering={setFiltering}
                   error={error}
                   fechaInicio={fechaInicio}
                   fechaFin={fechaFin}
