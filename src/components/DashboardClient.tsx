@@ -6,29 +6,14 @@ import {
   Clock, CheckCircle, Send, Loader2, X, ChevronDown, AlertCircle,
   Phone, DollarSign, Calendar, MapPin, MessageSquare, User as UserIcon,
   BarChart3, Users, Truck, Home, TrendingUp, ArrowUpRight, ChevronRight,
-  Mail, MoreVertical, Save, AlertTriangle, Upload, ArrowLeft, Edit3
+  Mail, MoreVertical, Save, AlertTriangle, Upload, ArrowLeft, Edit3, Trash2
 } from 'lucide-react'
 import ChileHomeLoader from './ChileHomeLoader'
 import ContratoPrevisualizador from './ContratoPrevisualizador'
+import CustomDatePicker from './CustomDatePicker'
+import FichasEliminadas from './FichasEliminadas'
 
-// Helper function to safely parse JSON responses
-async function safeParseJSON(response: Response) {
-  const responseText = await response.text()
-  
-  // Check if server returned HTML instead of JSON
-  if (responseText.trim().startsWith('<!DOCTYPE') || responseText.trim().startsWith('<html')) {
-    console.error('🚨 Frontend: Server returned HTML instead of JSON:', responseText.substring(0, 200) + '...')
-    throw new Error('Server returned HTML instead of JSON - possible authentication error')
-  }
-  
-  try {
-    return JSON.parse(responseText)
-  } catch (parseError) {
-    console.error('🚨 Frontend: JSON Parse Error:', parseError)
-    console.error('🚨 Frontend: Response text:', responseText.substring(0, 500) + '...')
-    throw new Error(`Invalid JSON response: ${parseError}`)
-  }
-}
+import { safeParseJSON, formatCurrency as formatCurrencyUtil, formatRUT as formatRUTUtil } from '@/lib/utils'
 
 interface Venta {
   id: string
@@ -606,35 +591,52 @@ const DashboardOverview = ({
           <p className="text-gray-600">Validación de contratos</p>
         </div>
         
-        {/* Filtro de fechas compacto */}
+        {/* Filtro de fechas con rango */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 w-fit">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
               <Calendar className="h-4 w-4 text-gray-500" />
-              <span className="text-sm text-gray-600">Del:</span>
-              <input
-                type="date"
-                value={fechaInicio}
-                onChange={(e) => setFechaInicio(e.target.value)}
-                min={fechaInicioProyecto}
-                max={fechaHoy}
-                className="px-2 py-1 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+              <span className="text-sm text-gray-600">Período:</span>
+              <CustomDatePicker
+                isRange={true}
+                startDate={fechaInicio ? (() => {
+                  const parts = fechaInicio.split('-');
+                  if (parts.length === 3) {
+                    return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                  }
+                  return null;
+                })() : null}
+                endDate={fechaFin ? (() => {
+                  const parts = fechaFin.split('-');
+                  if (parts.length === 3) {
+                    return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                  }
+                  return null;
+                })() : null}
+                onRangeChange={(startDate, endDate) => {
+                  const startString = startDate ? (() => {
+                    const year = startDate.getFullYear();
+                    const month = (startDate.getMonth() + 1).toString().padStart(2, '0');
+                    const day = startDate.getDate().toString().padStart(2, '0');
+                    return `${year}-${month}-${day}`;
+                  })() : ''
+                  
+                  const endString = endDate ? (() => {
+                    const year = endDate.getFullYear();
+                    const month = (endDate.getMonth() + 1).toString().padStart(2, '0');
+                    const day = endDate.getDate().toString().padStart(2, '0');
+                    return `${year}-${month}-${day}`;
+                  })() : ''
+                  
+                  setFechaInicio(startString)
+                  setFechaFin(endString)
+                }}
+                minDate={new Date(fechaInicioProyecto)}
+                maxDate={new Date()}
+                placeholder="Seleccionar período"
+                className="w-56"
               />
             </div>
-            
-            <span className="text-gray-400">al</span>
-            
-            <div className="flex items-center gap-2">
-              <input
-                type="date"
-                value={fechaFin}
-                onChange={(e) => setFechaFin(e.target.value)}
-                min={fechaInicio || fechaInicioProyecto}
-                max={fechaHoy}
-                className="px-2 py-1 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-            
             <div className="flex gap-1">
               <button
                 onClick={() => {
@@ -1055,7 +1057,8 @@ const ContratosSection = ({
   setContractFilters,
   setShowContractPreview,
   paginaActualVentas,
-  setPaginaActualVentas
+  setPaginaActualVentas,
+  setShowDeleteModal
 }: any) => {
   // Estados para paginación de ventas (usando el estado del componente padre)
   const ventasPorPagina = 5
@@ -1131,6 +1134,10 @@ const ContratosSection = ({
           </div>
           
           <div className="flex items-center gap-6 text-sm text-gray-500">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl font-bold text-gray-900">{ventas.length}</span>
+              <span>contratos cargados</span>
+            </div>
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 bg-green-500 rounded-full"></div>
               <span>Conectado al CRM</span>
@@ -1228,31 +1235,51 @@ const ContratosSection = ({
                 <span className="text-sm font-medium">Período:</span>
               </div>
               <div className="flex items-center gap-2">
-                <input
-                  type="date"
-                  value={fechaInicio}
-                  onChange={(e) => {
-                    setFechaInicio(e.target.value)
-                    // Auto-actualizar cuando se cambia la fecha
-                    setTimeout(() => {
-                      fetchVentas(e.target.value, fechaFin, false, 'auto')
-                    }, 500)
+                <CustomDatePicker
+                  isRange={true}
+                  startDate={fechaInicio ? (() => {
+                    const parts = fechaInicio.split('-');
+                    if (parts.length === 3) {
+                      return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                    }
+                    return null;
+                  })() : null}
+                  endDate={fechaFin ? (() => {
+                    const parts = fechaFin.split('-');
+                    if (parts.length === 3) {
+                      return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                    }
+                    return null;
+                  })() : null}
+                  onRangeChange={(startDate, endDate) => {
+                    const startString = startDate ? (() => {
+                      const year = startDate.getFullYear();
+                      const month = (startDate.getMonth() + 1).toString().padStart(2, '0');
+                      const day = startDate.getDate().toString().padStart(2, '0');
+                      return `${year}-${month}-${day}`;
+                    })() : ''
+                    
+                    const endString = endDate ? (() => {
+                      const year = endDate.getFullYear();
+                      const month = (endDate.getMonth() + 1).toString().padStart(2, '0');
+                      const day = endDate.getDate().toString().padStart(2, '0');
+                      return `${year}-${month}-${day}`;
+                    })() : ''
+                    
+                    setFechaInicio(startString)
+                    setFechaFin(endString)
+                    
+                    // Auto-actualizar cuando se selecciona el rango completo
+                    if (startString && endString) {
+                      setTimeout(() => {
+                        fetchVentas(startString, endString, false, 'auto')
+                      }, 500)
+                    }
                   }}
-                  className="px-3 py-1.5 bg-white border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-                <span className="text-gray-500 text-sm">hasta</span>
-                <input
-                  type="date"
-                  value={fechaFin}
-                  onChange={(e) => {
-                    setFechaFin(e.target.value)
-                    // Auto-actualizar cuando se cambia la fecha
-                    setTimeout(() => {
-                      fetchVentas(fechaInicio, e.target.value, false, 'auto')
-                    }, 500)
-                  }}
-                  max={fechaHoy}
-                  className="px-3 py-1.5 bg-white border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  minDate={new Date(fechaInicioProyecto)}
+                  maxDate={new Date()}
+                  placeholder="Seleccionar período"
+                  className="w-64"
                 />
               </div>
             </div>
@@ -1478,6 +1505,20 @@ const ContratosSection = ({
                         </>
                       )}
                     </button>
+                    
+                    {/* Botón de eliminar */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setSelectedVenta(venta)
+                        setShowDeleteModal(true)
+                      }}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors text-xs font-medium border border-red-200"
+                      title="Eliminar contrato"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Eliminar
+                    </button>
                   </div>
                   
                   {venta.cliente_telefono && (
@@ -1608,6 +1649,7 @@ const ContratosSection = ({
 
 export default function DashboardClient({ user, contratos }: { user: any, contratos: any[] }) {
   const [activeSection, setActiveSection] = useState('dashboard')
+  const [contratosSubsection, setContratosSubsection] = useState('activos')
   const [showContractPreview, setShowContractPreview] = useState(false)
   const [contractFilters, setContractFilters] = useState({
     status: 'todos', // todos, borrador, validado, enviado, generado
@@ -1661,6 +1703,10 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
   const [showContractConfirmation, setShowContractConfirmation] = useState(false)
   const [contractEditableData, setContractEditableData] = useState<any>(null)
   const [showMissingFieldsEditor, setShowMissingFieldsEditor] = useState(false)
+  
+  // Estados para eliminar contratos
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   
   // Estados para autocompletado de email
   const [emailSuggestions, setEmailSuggestions] = useState<string[]>([])
@@ -2252,6 +2298,61 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
     }
   }
 
+  // Función para eliminar contratos/ventas
+  const handleEliminarContrato = async (venta: Venta) => {
+    if (!venta) return
+    
+    setDeletingId(venta.id)
+    
+    try {
+      const response = await fetch(`/api/crm/ventas/${venta.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          datosVenta: venta,
+          motivoEliminacion: 'Eliminado desde dashboard'
+        })
+      })
+      
+      if (response.ok) {
+        // Eliminar de la lista local
+        setVentas(prev => prev.filter((v: any) => v.id !== venta.id))
+        setClientes(prev => prev.filter((c: any) => c.id !== venta.id))
+        
+        // Mostrar notificación de éxito
+        setNotification({
+          type: 'success',
+          message: `Contrato de ${venta.cliente_nombre} eliminado exitosamente`
+        })
+        
+        // Cerrar modales
+        setShowDeleteModal(false)
+        setSelectedVenta(null)
+        
+        // Limpiar notificación después de 3 segundos
+        setTimeout(() => {
+          setNotification(null)
+        }, 3000)
+      } else {
+        const errorData = await safeParseJSON(response)
+        throw new Error(errorData.error || 'Error al eliminar el contrato')
+      }
+    } catch (error) {
+      console.error('Error eliminando contrato:', error)
+      setNotification({
+        type: 'error',
+        message: 'Error al eliminar el contrato. Inténtalo de nuevo.'
+      })
+      setTimeout(() => {
+        setNotification(null)
+      }, 5000)
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   const fetchVentas = async (fechaInicio?: string, fechaFin?: string, isInitialLoad: boolean = false, buttonType?: 'apply' | 'reset') => {
     try {
       if (isInitialLoad) {
@@ -2530,32 +2631,66 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
             />
           )}
           {activeSection === 'contratos' && (
-            <ContratosSection 
-              ventas={ventasFiltradas}
-              setVentas={setVentas}
-              loading={loading}
-              filtering={filtering}
-              error={error}
-              fechaInicio={fechaInicio}
-              fechaFin={fechaFin}
-              setFechaInicio={setFechaInicio}
-              setFechaFin={setFechaFin}
-              fetchVentas={fetchVentas}
-              setShowValidationModal={setShowValidationModal}
-              setSelectedVenta={setSelectedVenta}
-              setShowDetallesModal={setShowDetallesModal}
-              soloValidados={soloValidados}
-              setSoloValidados={setSoloValidados}
-              fechaInicioProyecto={fechaInicioProyecto}
-              fechaHoy={fechaHoy}
-              generatingContractId={generatingContractId}
-              handleGenerarContrato={handleGenerarContrato}
-              contractFilters={contractFilters}
-              setContractFilters={setContractFilters}
-              setShowContractPreview={setShowContractPreview}
-              paginaActualVentas={paginaActualVentas}
-              setPaginaActualVentas={setPaginaActualVentas}
-            />
+            <div className="space-y-6">
+              {/* Submenú de contratos */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={() => setContratosSubsection('activos')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      contratosSubsection === 'activos'
+                        ? 'bg-blue-600 text-white'
+                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                    }`}
+                  >
+                    Contratos Activos
+                  </button>
+                  <button
+                    onClick={() => setContratosSubsection('eliminados')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      contratosSubsection === 'eliminados'
+                        ? 'bg-red-600 text-white'
+                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                    }`}
+                  >
+                    Fichas Eliminadas
+                  </button>
+                </div>
+              </div>
+
+              {/* Contenido según subsección */}
+              {contratosSubsection === 'activos' ? (
+                <ContratosSection 
+                  ventas={ventasFiltradas}
+                  setVentas={setVentas}
+                  loading={loading}
+                  filtering={filtering}
+                  error={error}
+                  fechaInicio={fechaInicio}
+                  fechaFin={fechaFin}
+                  setFechaInicio={setFechaInicio}
+                  setFechaFin={setFechaFin}
+                  fetchVentas={fetchVentas}
+                  setShowValidationModal={setShowValidationModal}
+                  setSelectedVenta={setSelectedVenta}
+                  setShowDetallesModal={setShowDetallesModal}
+                  soloValidados={soloValidados}
+                  setSoloValidados={setSoloValidados}
+                  fechaInicioProyecto={fechaInicioProyecto}
+                  fechaHoy={fechaHoy}
+                  generatingContractId={generatingContractId}
+                  handleGenerarContrato={handleGenerarContrato}
+                  contractFilters={contractFilters}
+                  setContractFilters={setContractFilters}
+                  setShowContractPreview={setShowContractPreview}
+                  paginaActualVentas={paginaActualVentas}
+                  setPaginaActualVentas={setPaginaActualVentas}
+                  setShowDeleteModal={setShowDeleteModal}
+                />
+              ) : (
+                <FichasEliminadas onRestoreFicha={() => fetchVentas(fechaInicio, fechaFin, false, 'force')} />
+              )}
+            </div>
           )}
           {activeSection === 'logistica' && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12 text-center">
@@ -2825,6 +2960,112 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
                       <CheckCircle className="h-4 w-4" />
                       Validar Contrato
                     </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Modal de confirmación para eliminar contrato - Diseño minimalista */}
+      {showDeleteModal && selectedVenta && (
+        <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-xl overflow-hidden">
+            {/* Icon at top */}
+            <div className="pt-8 pb-4 flex justify-center">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
+                <Trash2 className="h-8 w-8 text-red-500" />
+              </div>
+            </div>
+            
+            {/* Content */}
+            <div className="px-8 pb-8">
+              {/* Title */}
+              <h2 className="text-xl font-semibold text-gray-900 text-center mb-2 font-sans">
+                ¿Estás seguro que deseas<br />eliminar este contrato?
+              </h2>
+              
+              {/* Subtitle */}
+              <p className="text-gray-500 text-sm text-center mb-6 font-sans">
+                ID: {selectedVenta.id} • {selectedVenta.cliente_nombre}
+              </p>
+              
+              {/* Info boxes */}
+              <div className="space-y-3 mb-6">
+                <div className="bg-gray-50 rounded-lg px-4 py-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600 font-sans">Cliente:</span>
+                    <span className="text-sm font-medium text-gray-900 font-sans">{selectedVenta.cliente_nombre}</span>
+                  </div>
+                </div>
+                
+                <div className="bg-gray-50 rounded-lg px-4 py-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600 font-sans">ID CRM:</span>
+                    <span className="text-sm font-medium text-gray-900 font-sans">{selectedVenta.id}</span>
+                  </div>
+                </div>
+                
+                <div className="bg-gray-50 rounded-lg px-4 py-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600 font-sans">Valor del contrato:</span>
+                    <span className="text-sm font-medium text-gray-900 font-sans">
+                      {typeof selectedVenta.valor_total === 'number' 
+                        ? formatCurrency(selectedVenta.valor_total)
+                        : formatCurrency(parseFloat(selectedVenta.valor_total?.toString() || '0') || 0)}
+                    </span>
+                  </div>
+                </div>
+                
+                <div className="bg-gray-50 rounded-lg px-4 py-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-gray-600 font-sans">Estado actual:</span>
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium border ${getEstadoStyle(selectedVenta.estado_crm || '')}`}>
+                      {selectedVenta.estado_crm || 'Pendiente'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Warning message */}
+              <div className="bg-red-50 rounded-lg p-4 mb-6">
+                <div className="flex gap-3">
+                  <div className="flex-shrink-0">
+                    <div className="w-6 h-6 bg-red-100 rounded-full flex items-center justify-center">
+                      <AlertCircle className="h-4 w-4 text-red-600" />
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-700 font-sans">
+                    Toda la información relacionada con este contrato será eliminada permanentemente del sistema. Esta acción no se puede deshacer.
+                  </p>
+                </div>
+              </div>
+              
+              {/* Buttons */}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowDeleteModal(false)
+                    setSelectedVenta(null)
+                  }}
+                  className="flex-1 px-4 py-3 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium font-sans text-sm"
+                  disabled={deletingId === selectedVenta.id}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => handleEliminarContrato(selectedVenta)}
+                  className="flex-1 px-4 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors font-medium font-sans text-sm"
+                  disabled={deletingId === selectedVenta.id}
+                >
+                  {deletingId === selectedVenta.id ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Eliminando...
+                    </span>
+                  ) : (
+                    'Eliminar contrato'
                   )}
                 </button>
               </div>

@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { User, Contrato, Cliente } from '@/types'
+import { safeParseJSON } from '@/lib/utils'
 import { 
   ArrowLeft, 
   Save, 
@@ -87,7 +88,7 @@ export default function ContratoEditor({ contrato, user }: ContratoEditorProps) 
         body: JSON.stringify(data),
       })
 
-      const result = await response.json()
+      const result = await safeParseJSON(response)
 
       if (!response.ok) {
         throw new Error(result.error || 'Error al actualizar contrato')
@@ -111,7 +112,7 @@ export default function ContratoEditor({ contrato, user }: ContratoEditorProps) 
         method: 'POST',
       })
 
-      const result = await response.json()
+      const result = await safeParseJSON(response)
 
       if (!response.ok) {
         throw new Error(result.error || 'Error al validar contrato')

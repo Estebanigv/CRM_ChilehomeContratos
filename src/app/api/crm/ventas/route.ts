@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { crmApi } from '@/lib/crmApi'
+import { tempStorage } from '@/lib/tempStorage'
 
 // GET - Obtener ventas desde CRM
 export async function GET(request: NextRequest) {
@@ -28,10 +29,17 @@ export async function GET(request: NextRequest) {
       // Obtener ventas del CRM con filtros de fecha
       const ventas = await crmApi.obtenerVentas(filtroEjecutivo, fechaInicio ?? undefined, fechaFin ?? undefined)
 
+      // Filtrar ventas eliminadas usando tempStorage
+      const idsEliminados = new Set(tempStorage.getEliminatedIds())
+      const ventasDisponibles = ventas.filter(venta => !idsEliminados.has(venta.id))
+      
+      console.log(`📊 Ventas del CRM: ${ventas.length} total`)
+      console.log(`🗑️ Fichas eliminadas: ${idsEliminados.size} filtradas`)
+      console.log(`✅ Ventas disponibles: ${ventasDisponibles.length} mostradas`)
+
       // TEMP: Skip Supabase for testing
       // const { data: contractosExistentes } = await supabase.from('contratos').select('id')
       const idsContratosExistentes = new Set()
-      const ventasDisponibles = ventas
 
       return NextResponse.json({
         success: true,

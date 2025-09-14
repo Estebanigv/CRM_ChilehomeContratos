@@ -1,0 +1,187 @@
+
+> chilehome-contratos@0.1.0 build
+> next build
+
+ ⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of E:\Plataforma profesional de generación y validación de contratos\package-lock.json as the root directory.
+ To silence this warning, set `outputFileTracingRoot` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/output#caveats for more information.
+ Detected additional lockfiles: 
+   * E:\Plataforma profesional de generación y validación de contratos\chilehome-contratos\package-lock.json
+
+   ▲ Next.js 15.5.2
+   - Environments: .env.local
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully in 2.9s
+   Linting and checking validity of types ...
+
+Failed to compile.
+
+./src/app/api/clientes/seed/route.ts
+76:15  Warning: 'createTableSQL' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+
+./src/app/api/contratos/route.ts
+6:27  Warning: 'request' is defined but never used.  @typescript-eslint/no-unused-vars
+105:33  Error: 'clienteError' is never reassigned. Use 'const' instead.  prefer-const
+
+./src/app/api/contratos/[id]/enviar/route.ts
+133:21  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./src/app/api/crm/ventas/route.ts
+2:10  Warning: 'createClient' is defined but never used.  @typescript-eslint/no-unused-vars
+74:30  Warning: 'observaciones' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+
+./src/app/layout.tsx
+24:9  Warning: Do not include stylesheets manually. See: https://nextjs.org/docs/messages/no-css-tags  @next/next/no-css-tags
+25:9  Warning: Do not include stylesheets manually. See: https://nextjs.org/docs/messages/no-css-tags  @next/next/no-css-tags
+26:9  Warning: Do not include stylesheets manually. See: https://nextjs.org/docs/messages/no-css-tags  @next/next/no-css-tags
+27:9  Warning: Do not include stylesheets manually. See: https://nextjs.org/docs/messages/no-css-tags  @next/next/no-css-tags
+
+./src/app/login/page.tsx
+38:14  Warning: 'err' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./src/components/ContratoEditor.tsx
+3:20  Warning: 'useEffect' is defined but never used.  @typescript-eslint/no-unused-vars
+17:3  Warning: 'FileText' is defined but never used.  @typescript-eslint/no-unused-vars
+45:52  Warning: 'user' is defined but never used.  @typescript-eslint/no-unused-vars
+56:5  Warning: 'setValue' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+
+./src/components/ContratoPrevisualizador.tsx
+11:3  Warning: 'FileText' is defined but never used.  @typescript-eslint/no-unused-vars
+12:3  Warning: 'Calendar' is defined but never used.  @typescript-eslint/no-unused-vars
+13:3  Warning: 'DollarSign' is defined but never used.  @typescript-eslint/no-unused-vars
+14:3  Warning: 'Home' is defined but never used.  @typescript-eslint/no-unused-vars
+15:11  Warning: 'UserIcon' is defined but never used.  @typescript-eslint/no-unused-vars
+16:3  Warning: 'Mail' is defined but never used.  @typescript-eslint/no-unused-vars
+17:3  Warning: 'Phone' is defined but never used.  @typescript-eslint/no-unused-vars
+18:3  Warning: 'MapPin' is defined but never used.  @typescript-eslint/no-unused-vars
+153:21  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+201:278  Error: `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`.  react/no-unescaped-entities
+201:290  Error: `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`.  react/no-unescaped-entities
+201:313  Error: `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`.  react/no-unescaped-entities
+201:324  Error: `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`.  react/no-unescaped-entities
+201:719  Error: `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`.  react/no-unescaped-entities
+201:732  Error: `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`.  react/no-unescaped-entities
+212:258  Error: `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`.  react/no-unescaped-entities
+240:95  Error: `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`.  react/no-unescaped-entities
+455:19  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+
+./src/components/CrearContratoClient.tsx
+9:3  Warning: 'Search' is defined but never used.  @typescript-eslint/no-unused-vars
+10:3  Warning: 'Filter' is defined but never used.  @typescript-eslint/no-unused-vars
+11:3  Warning: 'Calendar' is defined but never used.  @typescript-eslint/no-unused-vars
+12:3  Warning: 'DollarSign' is defined but never used.  @typescript-eslint/no-unused-vars
+16:3  Warning: 'Phone' is defined but never used.  @typescript-eslint/no-unused-vars
+17:3  Warning: 'MapPin' is defined but never used.  @typescript-eslint/no-unused-vars
+24:3  Warning: 'Edit' is defined but never used.  @typescript-eslint/no-unused-vars
+65:10  Warning: 'loading' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+71:22  Warning: 'setSearchTerm' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+165:9  Warning: 'ventasFiltradas' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+174:58  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+220:13  Warning: 'contrato' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+226:14  Warning: 'error' is defined but never used.  @typescript-eslint/no-unused-vars
+257:14  Warning: 'error' is defined but never used.  @typescript-eslint/no-unused-vars
+297:14  Warning: 'error' is defined but never used.  @typescript-eslint/no-unused-vars
+343:14  Warning: 'error' is defined but never used.  @typescript-eslint/no-unused-vars
+754:49  Error: `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`.  react/no-unescaped-entities
+754:61  Error: `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`.  react/no-unescaped-entities
+754:67  Error: `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`.  react/no-unescaped-entities
+754:78  Error: `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`.  react/no-unescaped-entities
+757:31  Error: `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`.  react/no-unescaped-entities
+757:44  Error: `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`.  react/no-unescaped-entities
+
+./src/components/DashboardClient.tsx
+6:41  Warning: 'ChevronDown' is defined but never used.  @typescript-eslint/no-unused-vars
+7:10  Warning: 'DollarSign' is defined but never used.  @typescript-eslint/no-unused-vars
+9:9  Warning: 'MoreVertical' is defined but never used.  @typescript-eslint/no-unused-vars
+63:11  Warning: 'TeamMember' is defined but never used.  @typescript-eslint/no-unused-vars
+285:38  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+316:45  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+388:7  Warning: 'rendimientoEjecutivos' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+400:7  Warning: 'ventasMensuales' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+516:3  Warning: 'user' is defined but never used.  @typescript-eslint/no-unused-vars
+530:3  Warning: 'setSoloValidados' is defined but never used.  @typescript-eslint/no-unused-vars
+534:9  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+552:9  Warning: 'periodoActivo' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+553:9  Warning: 'diasTranscurridos' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+571:47  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+574:9  Warning: 'ventasPaginadas' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+575:9  Warning: 'totalPaginasVentas' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+1032:3  Warning: 'setVentas' is defined but never used.  @typescript-eslint/no-unused-vars
+1055:4  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+1060:41  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+1061:30  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+1105:15  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+1105:23  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+1321:40  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+1513:77  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+1597:49  Warning: 'contratos' is defined but never used.  @typescript-eslint/no-unused-vars
+1597:70  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+1597:86  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+1607:10  Warning: 'clientes' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+1610:10  Warning: 'stats' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+1646:50  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+1648:68  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+1654:10  Warning: 'emailInputValue' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+1793:27  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+1797:9  Warning: The 'popularEmailDomains' array makes the dependencies of useCallback Hook (at line 1958) change on every render. To fix this, wrap the initialization of 'popularEmailDomains' in its own useMemo() Hook.  react-hooks/exhaustive-deps
+1812:27  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+1840:6  Warning: React Hook useCallback has a missing dependency: 'popularEmailDomains'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+1844:27  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+1853:19  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+1856:25  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+1886:19  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+1961:53  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+2117:9  Warning: 'fetchClientes' is assigned a value but never used.  @typescript-eslint/no-unused-vars
+2279:48  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+2452:6  Warning: React Hook useEffect has missing dependencies: 'fechaFin', 'fechaInicio', and 'fetchVentas'. Either include them or remove the dependency array.  react-hooks/exhaustive-deps
+3737:29  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element  @next/next/no-img-element
+3769:247  Error: `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`.  react/no-unescaped-entities
+3769:259  Error: `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`.  react/no-unescaped-entities
+3769:578  Error: `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`.  react/no-unescaped-entities
+3769:591  Error: `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`.  react/no-unescaped-entities
+3790:57  Error: `"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`.  react/no-unescaped-entities
+
+./src/lib/crmApi.ts
+11:20  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+49:20  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+240:9  Error: 'contadorTemporal' is never reassigned. Use 'const' instead.  prefer-const
+302:16  Warning: 'error' is defined but never used.  @typescript-eslint/no-unused-vars
+366:36  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+368:55  Warning: 'numeroContrato' is defined but never used.  @typescript-eslint/no-unused-vars
+615:14  Warning: 'error' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./src/lib/pdfGenerator.ts
+49:28  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+49:43  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+84:34  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+84:45  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+84:60  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+114:32  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+114:43  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+114:58  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+157:36  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+157:47  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+157:62  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+271:37  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+271:48  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+271:63  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+414:40  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+414:51  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+414:66  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+455:32  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+455:43  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+455:58  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+./src/lib/supabase/server.ts
+15:51  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+18:20  Warning: 'error' is defined but never used.  @typescript-eslint/no-unused-vars
+22:39  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+25:20  Warning: 'error' is defined but never used.  @typescript-eslint/no-unused-vars
+
+./src/middleware.ts
+19:51  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+36:39  Error: Unexpected any. Specify a different type.  @typescript-eslint/no-explicit-any
+
+info  - Need to disable some ESLint rules? Learn more here: https://nextjs.org/docs/app/api-reference/config/eslint#disabling-rules

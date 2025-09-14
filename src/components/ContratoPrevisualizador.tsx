@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { User, Contrato, Cliente } from '@/types'
+import { safeParseJSON } from '@/lib/utils'
 import { 
   ArrowLeft, 
   Edit, 
@@ -135,7 +136,7 @@ export default function ContratoPrevisualizador({ contrato, user }: ContratoPrev
         method: 'POST',
       })
 
-      const result = await response.json()
+      const result = await safeParseJSON(response)
 
       if (!response.ok) {
         throw new Error(result.error || 'Error al enviar contrato')
