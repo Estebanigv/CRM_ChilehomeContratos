@@ -95,20 +95,12 @@ class CRMApi {
 
     const data: SmartCRMLoginResponse = await response.json()
     
-    console.log('🔍 Login response completa:', JSON.stringify(data, null, 2)) // Debug detallado
     
     if (data.err) {
       throw new Error(`Login error: ${data.msg}`)
     }
 
     this.accessToken = data.inf.adm_tok
-    console.log('👤 Usuario info:', {
-      id: data.inf.adm_id,
-      usuario: data.inf.adm_usu,
-      perfil_id: data.inf.adm_per_id,
-      supervisor: data.inf.adm_sup,
-      estado: data.inf.adm_est
-    }) // Debug info del usuario
     
     return this.accessToken
   }
@@ -122,8 +114,6 @@ class CRMApi {
     const token = await this.login()
     const url = `${this.baseUrl}${endpoint}`
     
-    console.log('Making request to:', url)
-    console.log('Using token:', token.substring(0, 20) + '...')
     
     const response = await fetch(url, {
       ...options,
@@ -152,7 +142,6 @@ class CRMApi {
         if (!retryResponse.ok) {
           // Log respuesta para debug cuando falle
           const responseText = await retryResponse.text()
-          console.error('🚨 CRM API Error Response:', responseText)
           throw new Error(`CRM API Error: ${retryResponse.status} ${retryResponse.statusText}`)
         }
         
@@ -161,39 +150,30 @@ class CRMApi {
         
         // Verificar si la respuesta es HTML (error común)
         if (retryResponseText.trim().startsWith('<!DOCTYPE') || retryResponseText.trim().startsWith('<html')) {
-          console.error('🚨 Retry response is HTML instead of JSON:', retryResponseText.substring(0, 200) + '...')
           throw new Error('Server returned HTML instead of JSON on retry - authentication still failing')
         }
         
         try {
           return JSON.parse(retryResponseText)
         } catch (parseError) {
-          console.error('🚨 JSON Parse Error on retry:', parseError)
-          console.error('🚨 Retry response text:', retryResponseText.substring(0, 500) + '...')
           throw new Error(`Invalid JSON response on retry: ${parseError}`)
         }
       }
       
-      // Log respuesta para debug cuando falle la primera vez
       const responseText = await response.text()
-      console.error('🚨 CRM API Error Response:', responseText)
       throw new Error(`CRM API Error: ${response.status} ${response.statusText}`)
     }
 
     // Verificar que la respuesta sea JSON válido
     const responseText = await response.text()
     
-    // Verificar si la respuesta es HTML (error común)
     if (responseText.trim().startsWith('<!DOCTYPE') || responseText.trim().startsWith('<html')) {
-      console.error('🚨 Server returned HTML instead of JSON:', responseText.substring(0, 200) + '...')
       throw new Error('Server returned HTML instead of JSON - possible authentication error')
     }
     
     try {
       return JSON.parse(responseText)
     } catch (parseError) {
-      console.error('🚨 JSON Parse Error:', parseError)
-      console.error('🚨 Response text:', responseText.substring(0, 500) + '...')
       throw new Error(`Invalid JSON response: ${parseError}`)
     }
   }
@@ -215,11 +195,6 @@ class CRMApi {
     const siguienteNumero = numerosExistentes.length > 0 ? Math.max(...numerosExistentes) + 1 : 1
     const year = new Date().getFullYear()
     
-    console.log(`🔢 Generando número correlativo:`, {
-      numeros_existentes: numerosExistentes,
-      siguiente_numero: siguienteNumero,
-      formato_final: `CONT-${year}-${siguienteNumero.toString().padStart(3, '0')}`
-    })
     
     return `CONT-${year}-${siguienteNumero.toString().padStart(3, '0')}`
   }
@@ -230,11 +205,6 @@ class CRMApi {
     const contratosConNumero = ventas.filter(v => v.numero_contrato && v.numero_contrato !== '0')
     const contratosSinNumero = ventas.filter(v => !v.numero_contrato || v.numero_contrato === '0')
     
-    console.log(`📊 Análisis de contratos:`, {
-      total: ventas.length,
-      con_numero: contratosConNumero.length,
-      sin_numero: contratosSinNumero.length
-    })
     
     // Para cada contrato sin número, generar uno correlativo
     let contadorTemporal = this.obtenerProximoNumeroCorrelativo(contratosConNumero)
@@ -242,10 +212,6 @@ class CRMApi {
     contratosSinNumero.forEach((venta, index) => {
       const year = new Date().getFullYear()
       venta.numero_contrato_temporal = `CONT-${year}-${(contadorTemporal + index).toString().padStart(3, '0')}`
-      console.log(`🔢 Número temporal asignado:`, {
-        cliente: venta.cliente_nombre,
-        numero_temporal: venta.numero_contrato_temporal
-      })
     })
   }
 
@@ -263,7 +229,6 @@ class CRMApi {
   }
 
   async obtenerVentas(ejecutivoId?: string, fechaInicio?: string, fechaFin?: string): Promise<CRMVenta[]> {
-    console.log('🔥 CRM API - Obteniendo ventas desde septiembre 2024 en adelante') // Debug
     
     // Si no hay credenciales, usar datos mock directamente
     if (!this.loginCredentials.usuario || !this.loginCredentials.clave) {
@@ -282,17 +247,13 @@ class CRMApi {
         const fechaDesde = primerDiaDelMes.toISOString().split('T')[0]
         const fechaHasta = hoy.toISOString().split('T')[0]
         baseEndpoint += `&sel_ini_des=${fechaDesde}&sel_ini_has=${fechaHasta}`
-        console.log('📅 Usando filtro de fechas personalizado:', fechaDesde, 'hasta', fechaHasta)
       } else if (fechaInicio && fechaFin) {
         baseEndpoint += `&sel_ini_des=${fechaInicio}&sel_ini_has=${fechaFin}`
-        console.log('📅 Usando filtro de fechas personalizado:', fechaInicio, 'hasta', fechaFin)
       } else {
         // Para obtener ventas validadas de la última semana
         baseEndpoint += '&ultima_semana=validacion'
-        console.log('📅 Obteniendo ventas validadas de la última semana')
       }
       
-      console.log('🔗 CRM Endpoint:', baseEndpoint) // Debug
       
       // OBTENER TODAS LAS PÁGINAS
       const todasLasVentas: any[] = []
@@ -301,58 +262,35 @@ class CRMApi {
       
       do {
         const endpoint = `${baseEndpoint}&page=${paginaActual}`
-        console.log(`🚀 Obteniendo página ${paginaActual} de ${totalPaginas}...`)
         
         let data: SmartCRMVentasResponse
         try {
           data = await this.makeRequest<SmartCRMVentasResponse>(endpoint, { method: 'GET' })
         } catch (error) {
-          console.log('❌ GET falló, intentando con POST...')
           data = await this.makeRequest<SmartCRMVentasResponse>(endpoint, { method: 'POST' })
         }
         
         if (!data.err && data.inf) {
-          console.log(`✅ Página ${paginaActual} - Ventas encontradas: ${data.inf.length}`)
           todasLasVentas.push(...data.inf)
-          
-          // Actualizar info de paginación
+
           if (paginaActual === 1) {
             totalPaginas = data.totalPages || 1
-            console.log(`📊 Total de páginas: ${totalPaginas}, Total de registros: ${data.totalrow || data.tot}`)
           }
-          
+
           paginaActual++
         } else {
-          console.log(`❌ Error en página ${paginaActual}:`, data.msg)
           break
         }
       } while (paginaActual <= totalPaginas)
       
       if (todasLasVentas.length > 0) {
-        console.log('✅ CRM Response SUCCESS - TOTAL de ventas obtenidas:', todasLasVentas.length)
-        
-        // Mapear datos del CRM a nuestro formato
         const ventas = todasLasVentas.map(venta => this.mapearVentaCRM(venta))
           .filter(venta => !ejecutivoId || venta.ejecutivo_id === ejecutivoId)
-        
-        // Para los contratos sin número, asignar números correlativos (solo para visualización)
+
         this.asignarNumerosCorrelativos(ventas)
-        
-        // Debug: Estados únicos del CRM
-        const estadosUnicos = [...new Set(ventas.map(v => v.estado_crm))]
-        console.log('🔍 Estados únicos encontrados en CRM:', estadosUnicos)
-        
-        // Debug: Distribución de estados
-        const distribucionEstados = estadosUnicos.map(estado => ({
-          estado,
-          cantidad: ventas.filter(v => v.estado_crm === estado).length
-        }))
-        console.log('📊 Distribución de estados:', distribucionEstados)
-        
-        console.log('📊 Ventas mapeadas exitosamente:', ventas.length)
+
         return ventas
       } else {
-        console.log('📭 No se encontraron ventas para el periodo especificado')
         return []
       }
     } catch (error) {
@@ -413,33 +351,8 @@ class CRMApi {
         .replace(/&ordm;/g, 'º')  // Agregado para ordinales masculinos
     }
 
-    // 🔍 DEBUG: Verificación completa de integridad de datos
     const estado = ventaCRM.ref_est_nom || 'Sin estado'
     const numeroContrato = ventaCRM.ref_ins_ord || '0'
-    
-    // Log completo del registro CRM para verificar integridad
-    console.log(`🔍 REGISTRO CRM COMPLETO [ID: ${ventaCRM.ref_id}]:`, {
-      id: ventaCRM.ref_id,
-      nombre: ventaCRM.ref_nom,
-      rut: ventaCRM.ref_run,
-      telefono: ventaCRM.ref_fon,
-      direccion: ventaCRM.ref_dir,
-      comuna: ventaCRM.ref_com,
-      region: ventaCRM.ref_reg,
-      fecha_creacion: ventaCRM.ref_cre_fec,
-      hora_creacion: ventaCRM.ref_cre_hor,
-      fecha_entrega: ventaCRM.ref_ins_fec_age,
-      vendedor: ventaCRM.ref_usu_nom,
-      supervisor: ventaCRM.ref_usu_sup_nom,
-      estado: estado,
-      numero_contrato: numeroContrato,
-      precio_final: ventaCRM.ref_pre_fin,
-      pago_final: ventaCRM.ref_pag_fin,
-      metodo_pago: ventaCRM.ref_met_pag,
-      observaciones: ventaCRM.ref_est_bit,
-      marca: ventaCRM.ref_mar_nom,
-      tipo_producto: ventaCRM.ref_tip_nom
-    })
     
     // La regla correcta: si numero_contrato != "0", entonces TIENE contrato
     const tieneContrato = numeroContrato !== '0' && numeroContrato !== '' && numeroContrato !== null
@@ -466,27 +379,19 @@ class CRMApi {
         return `Modelo ${metraje}` // Formato simplificado: Modelo 36m²
       })(), // ⭐ MODELO - formato limpio sin duplicaciones
       detalle_materiales: `${ventaCRM.ref_est_bit || 'Sin detalle'} | Método pago: ${ventaCRM.ref_met_pag} | Subcategoría: ${ventaCRM.ref_usu_sub_nom}`, // ⭐ DETALLES COMPLETOS
-      fecha_venta: (() => {
-        const fechaFinal = `${ventaCRM.ref_cre_fec} ${ventaCRM.ref_cre_hor || ''}`.trim()
-        if (ventaCRM.ref_nom?.toLowerCase().includes('alejandra')) {
-          console.log(`🗓️ RAW CRM dates for ${ventaCRM.ref_nom}:`, {
-            ref_cre_fec: ventaCRM.ref_cre_fec,
-            ref_cre_hor: ventaCRM.ref_cre_hor,
-            ref_ins_fec_age: ventaCRM.ref_ins_fec_age,
-            ref_agendado: ventaCRM.ref_agendado,
-            fecha_venta_final: fechaFinal,
-            fecha_entrega_final: ventaCRM.ref_ins_fec_age || ventaCRM.ref_agendado || 'Por definir'
-          })
-        }
-        return fechaFinal
-      })(),
+      fecha_venta: `${ventaCRM.ref_cre_fec} ${ventaCRM.ref_cre_hor || ''}`.trim(),
       fecha_entrega: ventaCRM.ref_ins_fec_age || ventaCRM.ref_agendado || 'Por definir',
       ejecutivo_id: ventaCRM.ref_usu_nom, // ⭐ NOMBRE REAL del vendedor
       ejecutivo_nombre: `${ventaCRM.ref_usu_nom} (${ventaCRM.ref_usu_per_nom || 'Vendedor'})`, // ⭐ VENDEDOR COMPLETO
       supervisor_nombre: ventaCRM.ref_usu_sup_nom || 'Sin supervisor',
-      estado_crm: tieneContrato ? 'Contrato' : estado, // ⭐ Si tiene contrato, mostrar "Contrato", sino el estado original
+      estado_crm: (() => {
+        if (estado === 'Entrega OK' || estado === 'Confirmación de entrega') {
+          return estado
+        }
+        return tieneContrato ? 'Contrato' : estado
+      })(),
       observaciones_crm: ventaCRM.ref_est_bit || 'Sin observaciones',
-      numero_contrato: numeroContrato // ⭐ NÚMERO DE CONTRATO (0 = sin contrato generado)
+      numero_contrato: numeroContrato
     }
   }
 

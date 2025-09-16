@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Calendar, ChevronDown, Filter, Search, Users, TrendingUp, Building, CheckCircle, Clock, AlertCircle, XCircle } from 'lucide-react'
+import { Calendar, ChevronDown, Filter, Search, Users, TrendingUp, Building, CheckCircle, Clock, AlertCircle, XCircle, User } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 
 interface VentaCRM {
   id: string
@@ -52,6 +53,7 @@ export default function CRMDashboard() {
   const [error, setError] = useState<string | null>(null)
   const [pageSize, setPageSize] = useState(10)
   const [currentPage, setCurrentPage] = useState(1)
+  const [vendedorNombre, setVendedorNombre] = useState<string>('')
   const [dateRange, setDateRange] = useState({
     start: new Date(2024, 8, 1).toISOString().split('T')[0], // Sept 1
     end: new Date().toISOString().split('T')[0]
@@ -59,7 +61,35 @@ export default function CRMDashboard() {
 
   useEffect(() => {
     cargarDatos()
+    cargarUsuario()
   }, [])
+
+  const cargarUsuario = async () => {
+    try {
+      const supabase = createClient()
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+
+      if (authUser) {
+        const { data: userProfile } = await supabase
+          .from('usuarios')
+          .select('nombre')
+          .eq('id', authUser.id)
+          .single()
+
+        if (userProfile?.nombre) {
+          // Obtener solo el primer nombre
+          const primerNombre = userProfile.nombre.split(' ')[0]
+          setVendedorNombre(primerNombre)
+        }
+      } else {
+        // Usuario de prueba por defecto
+        setVendedorNombre('Esteban')
+      }
+    } catch (error) {
+      console.error('Error cargando usuario:', error)
+      setVendedorNombre('Esteban')
+    }
+  }
 
   const cargarDatos = async () => {
     try {
@@ -193,9 +223,20 @@ export default function CRMDashboard() {
       {/* Header */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
         <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-semibold text-gray-900">CRM Inteligente ChileHome</h1>
-            <p className="text-sm text-gray-500 mt-1">Validación de contratos y gestión de ventas</p>
+          <div className="flex items-center space-x-4">
+            <div>
+              <h1 className="text-2xl font-semibold text-gray-900">CRM Inteligente ChileHome</h1>
+              <p className="text-sm text-gray-500 mt-1">Validación de contratos y gestión de ventas</p>
+            </div>
+            {vendedorNombre && (
+              <div className="flex items-center space-x-2 bg-blue-50 px-3 py-2 rounded-lg border border-blue-200">
+                <User className="w-4 h-4 text-blue-600" />
+                <div className="text-sm">
+                  <span className="text-blue-600 font-medium">Vendedor:</span>
+                  <span className="text-blue-800 font-semibold ml-1">{vendedorNombre}</span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Selector de fechas */}
@@ -379,21 +420,21 @@ export default function CRMDashboard() {
 
         {/* Paginación */}
         <div className="bg-white px-6 py-3 border-t border-gray-200 flex items-center justify-between">
-          <div className="flex items-center space-x-2 text-sm text-gray-700">
-            <span>Mostrando</span>
+          <div className="flex items-center space-x-2 text-sm">
+            <span className="text-gray-700">Mostrando</span>
             <select
               value={pageSize}
               onChange={(e) => {
                 setPageSize(Number(e.target.value))
                 setCurrentPage(1)
               }}
-              className="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="border border-yellow-300 bg-yellow-50 text-yellow-800 font-semibold rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500"
             >
-              <option value={10}>10</option>
-              <option value={25}>25</option>
-              <option value={50}>50</option>
+              <option value={10} className="text-gray-900 bg-white">10</option>
+              <option value={25} className="text-gray-900 bg-white">25</option>
+              <option value={50} className="text-gray-900 bg-white">50</option>
             </select>
-            <span>de {resumenMensual?.ventas_detalle.length || 0} clientes</span>
+            <span className="text-gray-700">de <span className="text-gray-900 font-semibold">{resumenMensual?.ventas_detalle.length || 0}</span> clientes</span>
           </div>
 
           <div className="flex items-center space-x-2">

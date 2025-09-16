@@ -7,7 +7,7 @@ import {
   Phone, DollarSign, Calendar, MapPin, MessageSquare, User as UserIcon,
   BarChart3, Users, Truck, Home, TrendingUp, ArrowUpRight, ChevronRight,
   Mail, MoreVertical, Save, AlertTriangle, Upload, ArrowLeft, Edit3, Trash2,
-  RefreshCw, Menu, ChevronLeft
+  RefreshCw, Menu, ChevronLeft, FileSpreadsheet
 } from 'lucide-react'
 import ChileHomeLoader from './ChileHomeLoader'
 import ContratoPrevisualizador from './ContratoPrevisualizador'
@@ -41,13 +41,15 @@ interface Cliente {
   id: string
   nombre: string
   email?: string
-  estado: 'Pendiente contrato' | 'Contrato activo' | 'Rechazado'
+  estado: string
   fecha_ingreso: string
   telefono?: string
   rut?: string
   direccion?: string
   created_at: string
   updated_at: string
+  crm_id?: string
+  fecha_despacho?: string
 }
 
 interface TeamMember {
@@ -212,13 +214,13 @@ const getEstadoStyle = (estado: string) => {
   
   // Estados según el flujo del proceso
   if (estadoLower.includes('preingreso') || estadoLower.includes('pre-ingreso') || estadoLower.includes('ingreso')) {
-    return 'bg-blue-100 text-blue-800 border-blue-200' // Azul para preingreso
+    return 'bg-purple-100 text-purple-800 border-purple-200' // Púrpura para preingreso
   }
   if (estadoLower.includes('validacion') || estadoLower.includes('validación')) {
     return 'bg-yellow-100 text-yellow-800 border-yellow-200' // Amarillo para validación
   }
   if (estadoLower.includes('contrato') && !estadoLower.includes('confirmacion')) {
-    return 'bg-purple-100 text-purple-800 border-purple-200' // Púrpura para contrato
+    return 'bg-blue-100 text-blue-700 border-blue-200' // Azul para contrato (diferente de entrega)
   }
   if (estadoLower.includes('confirmacion') || estadoLower.includes('confirmación') || estadoLower.includes('entrega') && !estadoLower.includes('ok')) {
     return 'bg-orange-100 text-orange-800 border-orange-200' // Naranja para confirmación entrega
@@ -226,8 +228,11 @@ const getEstadoStyle = (estado: string) => {
   if (estadoLower.includes('produccion') || estadoLower.includes('producción') || estadoLower.includes('fabrica')) {
     return 'bg-indigo-100 text-indigo-800 border-indigo-200' // Índigo para producción
   }
-  if (estadoLower.includes('entrega ok') || estadoLower.includes('completado') || estadoLower.includes('finalizado')) {
-    return 'bg-green-100 text-green-800 border-green-200' // Verde para entrega OK
+  if (estadoLower.includes('entrega ok')) {
+    return 'bg-green-600 text-white border-green-700' // Verde intenso para entrega OK (100% completado)
+  }
+  if (estadoLower.includes('completado') || estadoLower.includes('finalizado')) {
+    return 'bg-green-500 text-white border-green-600' // Verde medio para otros completados
   }
   if (estadoLower.includes('rechaz') || estadoLower.includes('cancel')) {
     return 'bg-red-100 text-red-800 border-red-200' // Rojo para rechazados/cancelados
@@ -263,15 +268,60 @@ const formatPhone = (phone: string): string => {
   return phone
 }
 
-const formatName = (name: string): string => {
+// Función para formatear nombres completos de clientes (nombre y apellido)
+const formatClientName = (name: string): string => {
   if (!name || typeof name !== 'string') return ''
-  
-  return name
+
+  // Limpiar el nombre de cualquier texto entre paréntesis
+  const cleanedName = name.replace(/\s*\([^)]*\)/g, '').trim()
+
+  return cleanedName
     .toLowerCase()
     .split(' ')
     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ')
 }
+
+// Función para formatear nombres de ejecutivos (solo primer nombre o nombres compuestos)
+const formatExecutiveName = (name: string): string => {
+  if (!name || typeof name !== 'string') return ''
+
+  // Limpiar el nombre de cualquier texto entre paréntesis
+  const cleanedName = name.replace(/\s*\([^)]*\)/g, '').trim()
+
+  // Obtener solo el primer nombre o nombres compuestos
+  const words = cleanedName.toLowerCase().split(' ')
+
+  // Nombres compuestos comunes que deben mantenerse juntos
+  const compoundNames = [
+    'ana maría', 'ana maria', 'ana cristina', 'ana carolina', 'ana lucia', 'ana sofía',
+    'maría josé', 'maría elena', 'maría teresa', 'maría carolina', 'maría paz',
+    'josé luis', 'josé antonio', 'josé miguel', 'josé manuel', 'josé maría',
+    'juan carlos', 'juan pablo', 'juan manuel', 'juan josé', 'juan antonio',
+    'luis fernando', 'luis carlos', 'luis alberto', 'luis antonio',
+    'carlos alberto', 'carlos eduardo', 'carlos andrés',
+    'francisco javier', 'francisco josé',
+    'pedro pablo', 'pedro luis',
+    'diego alejandro', 'diego fernando'
+  ]
+
+  // Verificar si el nombre completo coincide con algún nombre compuesto
+  const fullName = words.join(' ')
+  for (const compound of compoundNames) {
+    if (fullName.startsWith(compound)) {
+      return compound
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ')
+    }
+  }
+
+  // Si no es un nombre compuesto, solo devolver la primera palabra
+  return words[0] ? words[0].charAt(0).toUpperCase() + words[0].slice(1) : ''
+}
+
+// Función legacy para compatibilidad
+const formatName = formatClientName
 
 // Función para limpiar el nombre del vendedor (quitar texto entre paréntesis)
 const cleanVendorName = (name: string): string => {
@@ -428,18 +478,69 @@ let ejecutivosConstruMater = [
 // Todos los ejecutivos combinados
 const todosLosEjecutivos = [...ejecutivosChileHome, ...ejecutivosConstruMater]
 
-// Función para obtener el color de la etiqueta de estado
+// Función para obtener el color de la etiqueta de estado según especificación del usuario
 const getEstadoColor = (estado: string) => {
-  switch (estado) {
-    case 'Contrato activo':
-      return 'bg-green-100 text-green-800 border-green-200'
-    case 'Pendiente contrato':
-      return 'bg-yellow-100 text-yellow-800 border-yellow-200'
-    case 'Rechazado':
-      return 'bg-red-100 text-red-800 border-red-200'
-    default:
-      return 'bg-gray-100 text-gray-800 border-gray-200'
+  if (!estado) return 'bg-gray-100 text-gray-800 border-gray-200'
+
+  const estadoLower = estado.toLowerCase().trim()
+
+  // Entrega OK (verde intenso) - 100% completado
+  if (estadoLower.includes('entrega ok')) {
+    return 'bg-green-600 text-white border-green-700'
   }
+
+  // Contratos (azul) - contratos armados
+  if (estadoLower.includes('contrato') ||
+      estadoLower.includes('listo') ||
+      estadoLower.includes('activ') ||
+      estadoLower.includes('aprob')) {
+    return 'bg-blue-100 text-blue-700 border-blue-200'
+  }
+
+  // Completados/Finalizados (verde medio)
+  if (estadoLower.includes('completado') ||
+      estadoLower.includes('finalizado') ||
+      estadoLower.includes('entregado')) {
+    return 'bg-green-500 text-white border-green-600'
+  }
+
+  // Confirmación de entrega (naranja) - en proceso
+  if (estadoLower.includes('confirmacion') || estadoLower.includes('confirmación')) {
+    return 'bg-orange-100 text-orange-800 border-orange-200'
+  }
+
+  // Validación (amarillo) - estados en validación/proceso
+  if (estadoLower.includes('validad') ||
+      estadoLower.includes('validacion') ||
+      estadoLower === 'validación' ||
+      estadoLower === 'validacion' ||
+      estadoLower.includes('proceso') ||
+      estadoLower.includes('revision') ||
+      estadoLower.includes('analisis') ||
+      estadoLower.includes('evaluacion') ||
+      estadoLower.includes('pendiente')) {
+    return 'bg-yellow-100 text-yellow-800 border-yellow-200'
+  }
+
+  // Pre-ingreso (púrpura) - estados iniciales
+  if (estadoLower.includes('pre-ingreso') ||
+      estadoLower.includes('preingreso') ||
+      estadoLower.includes('ingreso') ||
+      estadoLower.includes('nuevo') ||
+      estadoLower.includes('inicial')) {
+    return 'bg-purple-100 text-purple-800 border-purple-200'
+  }
+
+  // Estados rechazados/cancelados (rojo)
+  if (estadoLower.includes('rechazad') ||
+      estadoLower.includes('cancelad') ||
+      estadoLower.includes('anulad') ||
+      estadoLower.includes('suspendid')) {
+    return 'bg-red-100 text-red-800 border-red-200'
+  }
+
+  // Por defecto: azul (pre-ingreso)
+  return 'bg-blue-100 text-blue-800 border-blue-200'
 }
 
 // Simulación de rendimiento de ejecutivos (se reemplazará con datos del CRM)
@@ -616,12 +717,12 @@ const Sidebar = React.forwardRef<HTMLDivElement, {
 Sidebar.displayName = 'Sidebar'
 
 // Componente para el Dashboard Overview Ejecutivo
-const DashboardOverview = ({ 
-  stats, 
-  ventas, 
-  user, 
-  clientes, 
-  clientesLoading, 
+const DashboardOverview = ({
+  stats,
+  ventas,
+  user,
+  clientes,
+  clientesLoading,
   clientesError,
   fechaInicio,
   fechaFin,
@@ -636,9 +737,9 @@ const DashboardOverview = ({
   setSoloValidados,
   paginaActualVentas,
   setPaginaActualVentas
-}: { 
-  stats: DashboardStats, 
-  ventas: Venta[], 
+}: {
+  stats: DashboardStats,
+  ventas: Venta[],
   user: any,
   clientes: Cliente[],
   clientesLoading: boolean,
@@ -661,21 +762,508 @@ const DashboardOverview = ({
   const diaActual = new Date().getDate()
   const periodoActivo = `${mesActual} - ${diaActual}`
   const diasTranscurridos = new Date().getDate() // Días transcurridos del mes actual
-  
+
+  // Estados para filtros de clientes
+  const [filtros, setFiltros] = useState({
+    id: '',
+    nombre: '',
+    ejecutivo: '',
+    fecha: '',
+    fechaInicio: '',
+    fechaFin: '',
+    estado: '' // Nuevo filtro para estado del CRM
+  })
+
+  // Estados únicos del CRM
+  const [estadosUnicos, setEstadosUnicos] = useState<string[]>([])
+
   // Estados para paginación de clientes
   const [paginaActualClientes, setPaginaActualClientes] = useState(1)
-  const clientesPorPagina = 5
+  const [clientesPorPagina, setClientesPorPagina] = useState(5)
+  const [mostrarInputPersonalizado, setMostrarInputPersonalizado] = useState(false)
+  const [valorPersonalizado, setValorPersonalizado] = useState('')
   
   // Estados para paginación de ventas (usando el estado del componente padre)
   const ventasPorPagina = 5
   
   // Las estadísticas ya vienen calculadas desde el componente padre con los datos filtrados
   
-  // Paginación de clientes
+  // Determinar qué ventas usar para filtrar clientes
+  const ventasParaClientes = useMemo(() => {
+    // IMPORTANTE: 'ventas' ya viene filtrado por el período principal del calendario
+    // Si NO hay filtros locales, usar las ventas del período principal
+    if (!filtros.fechaInicio && !filtros.fechaFin && !filtros.fecha) {
+      console.log('📅 Usando período principal del calendario, ventas:', ventas.length)
+      return ventas
+    }
+
+    // Si hay filtros locales de fecha, necesitamos filtrar desde TODAS las ventas
+    // Pero aquí solo tenemos las ventas del período principal...
+    // Para verdadera independencia, necesitaríamos acceso a todas las ventas
+    console.log('🔍 Filtros locales activos (limitados al período principal):', {
+      fechaInicio: filtros.fechaInicio,
+      fechaFin: filtros.fechaFin,
+      fecha: filtros.fecha,
+      totalVentasDisponibles: ventas.length
+    })
+
+      return ventas.filter(venta => {
+        if (!venta.fecha_venta) return false
+
+        try {
+          // Normalizar fechas para comparación (solo YYYY-MM-DD)
+          const fechaVentaStr = venta.fecha_venta.split('T')[0] // En caso de que tenga timestamp
+
+          // Validar formato de fecha antes de crear Date object
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaVentaStr)) {
+            console.warn('📅 Formato de fecha inválido:', fechaVentaStr)
+            return false
+          }
+
+          const fechaVenta = new Date(fechaVentaStr + 'T12:00:00') // Usar mediodía para evitar timezone issues
+
+          // Validar que la fecha sea válida
+          if (isNaN(fechaVenta.getTime())) {
+            console.warn('📅 Fecha inválida:', fechaVentaStr)
+            return false
+          }
+
+          if (filtros.fecha) {
+            const fechaEspecificaStr = filtros.fecha
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaEspecificaStr)) return false
+
+            const fechaEspecifica = new Date(fechaEspecificaStr + 'T12:00:00')
+            if (isNaN(fechaEspecifica.getTime())) return false
+
+            console.log('📅 Comparando fecha específica:', {
+              venta: fechaVentaStr,
+              filtro: fechaEspecificaStr,
+              match: fechaVentaStr === fechaEspecificaStr
+            })
+
+            return fechaVentaStr === fechaEspecificaStr
+          } else if (filtros.fechaInicio && filtros.fechaFin) {
+            const fechaInicioStr = filtros.fechaInicio
+            const fechaFinStr = filtros.fechaFin
+
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaInicioStr) || !/^\d{4}-\d{2}-\d{2}$/.test(fechaFinStr)) {
+              return false
+            }
+
+            const fechaInicio = new Date(fechaInicioStr + 'T00:00:00')
+            const fechaFin = new Date(fechaFinStr + 'T23:59:59')
+
+            if (isNaN(fechaInicio.getTime()) || isNaN(fechaFin.getTime())) {
+              return false
+            }
+
+            const estaEnRango = fechaVenta >= fechaInicio && fechaVenta <= fechaFin
+
+            console.log('📅 Comparando rango:', {
+              venta: fechaVentaStr,
+              inicio: fechaInicioStr,
+              fin: fechaFinStr,
+              enRango: estaEnRango
+            })
+
+            return estaEnRango
+          } else if (filtros.fechaInicio) {
+            const fechaInicioStr = filtros.fechaInicio
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaInicioStr)) return false
+
+            const fechaInicio = new Date(fechaInicioStr + 'T00:00:00')
+            if (isNaN(fechaInicio.getTime())) return false
+
+            console.log('📅 Comparando desde fecha:', {
+              venta: fechaVentaStr,
+              inicio: fechaInicioStr,
+              desdeFecha: fechaVenta >= fechaInicio
+            })
+
+            return fechaVenta >= fechaInicio
+          }
+
+          return true
+        } catch (error) {
+          console.error('📅 Error procesando fecha de venta:', venta.fecha_venta, error)
+          return false
+        }
+      })
+    // Aplicar filtros locales sobre las ventas del período principal disponible
+    // NOTA: Para filtrado completamente independiente, necesitaríamos todas las ventas del sistema
+  }, [ventas, filtros.fechaInicio, filtros.fechaFin, filtros.fecha])
+
+  // Generar clientes basados en las ventas filtradas por período
+  const clientesBasePeriodo = useMemo(() => {
+    // Si NO hay filtros locales, usar los clientes del período principal
+    if (!filtros.fechaInicio && !filtros.fechaFin && !filtros.fecha) {
+      console.log('📊 Usando clientes del período principal:', clientes.length)
+      return clientes
+    }
+
+    // Si hay filtros locales, generar clientes desde las ventas filtradas localmente
+    console.log('📊 Generando clientes desde filtros locales, ventas filtradas:', ventasParaClientes.length)
+    const clientesMap = new Map<string, any>()
+
+    ventasParaClientes.forEach(venta => {
+      try {
+        const clienteKey = venta.cliente_nombre?.trim() || `cliente_${Date.now()}_${Math.random()}`
+
+        if (!clientesMap.has(clienteKey)) {
+          clientesMap.set(clienteKey, {
+            id: venta.id,
+            nombre: venta.cliente_nombre || 'Sin nombre',
+            email: undefined,
+            estado: venta.estado_crm || 'Ingreso',
+            fecha_ingreso: venta.fecha_venta,
+            fecha_despacho: venta.fecha_entrega,
+            telefono: venta.cliente_telefono,
+            rut: venta.cliente_rut,
+            direccion: venta.direccion_entrega,
+            created_at: venta.fecha_venta,
+            updated_at: new Date().toISOString()
+          })
+        }
+      } catch (ventaError) {
+        console.error('Error processing venta:', ventaError)
+      }
+    })
+
+    return Array.from(clientesMap.values())
+      .sort((a, b) => {
+        const dateA = new Date(b.fecha_ingreso || '1970-01-01').getTime()
+        const dateB = new Date(a.fecha_ingreso || '1970-01-01').getTime()
+        return dateA - dateB
+      })
+  }, [filtros.fechaInicio, filtros.fechaFin, filtros.fecha, clientes, ventasParaClientes])
+
+  // Filtrado de clientes
+  const clientesFiltrados = useMemo(() => {
+    return clientesBasePeriodo.filter(cliente => {
+      // Filtro por ID
+      if (filtros.id && !cliente.id.toLowerCase().includes(filtros.id.toLowerCase())) {
+        return false
+      }
+
+      // Filtro por nombre
+      if (filtros.nombre && !cliente.nombre.toLowerCase().includes(filtros.nombre.toLowerCase())) {
+        return false
+      }
+
+      // Filtro por ejecutivo
+      if (filtros.ejecutivo) {
+        const venta = ventasParaClientes.find(v => v.cliente_nombre === cliente.nombre)
+        const ejecutivo = venta?.ejecutivo_nombre || ''
+        if (!ejecutivo.toLowerCase().includes(filtros.ejecutivo.toLowerCase())) {
+          return false
+        }
+      }
+
+      // Filtro por estado
+      if (filtros.estado && filtros.estado !== 'todos') {
+        if (cliente.estado !== filtros.estado) {
+          return false
+        }
+      }
+
+      return true
+    })
+  }, [clientesBasePeriodo, filtros, ventasParaClientes])
+
+  // Actualizar estados únicos cuando cambien las ventas
+  useEffect(() => {
+    if (ventas && ventas.length > 0) {
+      console.log('🔍 ANALIZANDO ESTADOS DEL CRM:')
+      console.log(`📊 Total de ventas: ${ventas.length}`)
+
+      // Contar todos los estados
+      const estadosCount = {}
+      ventas.forEach(venta => {
+        const estado = venta.estado_crm || 'SIN ESTADO'
+        estadosCount[estado] = (estadosCount[estado] || 0) + 1
+      })
+
+      console.log('📈 CONTEO DE ESTADOS:')
+      Object.entries(estadosCount).forEach(([estado, cantidad]) => {
+        console.log(`  ${estado}: ${cantidad} casos`)
+      })
+
+      const estados = [...new Set(ventas.map(v => v.estado_crm).filter(Boolean))].sort()
+      setEstadosUnicos(estados)
+
+      console.log('🏷️ Estados únicos ordenados:', estados)
+      console.log('🔍 VERIFICACIÓN DE DATOS PARA FILTROS:')
+      console.log(`   - Total ventas procesadas: ${ventas.length}`)
+      console.log(`   - Estados únicos detectados: ${estados.length}`)
+      console.log('   - Lista completa de estados:', estados)
+
+      // Debug específico para Entrega OK en los datos que se usan para filtros
+      const entregaFilterData = ventas.filter(v =>
+        v.estado_crm && (
+          v.estado_crm.toLowerCase().includes('entrega') ||
+          v.estado_crm.toLowerCase().includes('entrega ok') ||
+          v.estado_crm === 'Entrega OK'
+        )
+      )
+      console.log(`   ✅ Ventas con "Entrega" para filtros: ${entregaFilterData.length}`)
+      if (entregaFilterData.length > 0) {
+        console.log('   📋 Estados de entrega encontrados:', [...new Set(entregaFilterData.map(v => v.estado_crm))])
+      }
+
+      // Verificar específicamente "Entrega OK"
+      const entregaOK = ventas.filter(v =>
+        v.estado_crm && v.estado_crm.toLowerCase().includes('entrega')
+      )
+      console.log(`✅ CASAS CON "ENTREGA" EN ESTADO: ${entregaOK.length}`)
+      if (entregaOK.length > 0) {
+        console.log('Estados con "entrega":', entregaOK.map(v => v.estado_crm))
+      }
+
+      console.log('🔍 BÚSQUEDA DE "ENTREGA OK" EXPANDIDA:')
+      console.log(`   - Período ampliado: ${fechaInicio || 'fecha inicio'} al ${fechaFin || 'fecha fin'}`)
+      console.log('   - Ahora buscando en los últimos 3 meses para encontrar estados de entrega')
+      if (entregaOK.length === 0) {
+        console.log('   ⚠️  NO hay registros con "Entrega OK" en este período extendido')
+        console.log('   💡 Considera revisar si el estado se llama diferente en el CRM')
+      } else {
+        console.log(`   ✅ ENCONTRADOS ${entregaOK.length} registros con estados de entrega`)
+      }
+    }
+  }, [ventas])
+
+  // Debug: Analizar discrepancia entre stats principales y gestión de clientes
+  useEffect(() => {
+    console.log('🔍 DEBUG - Análisis de datos:')
+    console.log('📊 Stats principales (stats prop):', stats.totalVentas, 'ventas')
+    console.log('📊 Ventas disponibles en componente:', ventas.length)
+    console.log('📊 Clientes disponibles en componente:', clientes.length)
+
+    // Debug: Mostrar rango de fechas reales en los datos
+    const fechasVentas = ventas.map(v => v.fecha_venta).filter(Boolean).sort()
+    console.log('📅 Rango de fechas en datos:', {
+      primera: fechasVentas[0],
+      ultima: fechasVentas[fechasVentas.length - 1],
+      total: fechasVentas.length
+    })
+
+    // Debug: Filtros actuales
+    console.log('🔧 Filtros actuales:', {
+      fechaInicio: filtros.fechaInicio,
+      fechaFin: filtros.fechaFin,
+      fecha: filtros.fecha
+    })
+    console.log('📊 Ventas para clientes (filtradas):', ventasParaClientes.length)
+    console.log('📊 Clientes base período:', clientesBasePeriodo.length)
+    console.log('📊 Clientes filtrados finales:', clientesFiltrados.length)
+    console.log('📊 Filtros activos:', {
+      id: filtros.id,
+      nombre: filtros.nombre,
+      ejecutivo: filtros.ejecutivo,
+      fecha: filtros.fecha,
+      fechaInicio: filtros.fechaInicio,
+      fechaFin: filtros.fechaFin
+    })
+  }, [stats, ventas, clientes, ventasParaClientes, clientesBasePeriodo, clientesFiltrados, filtros])
+
+  // Calcular estadísticas locales basadas en los clientes filtrados
+  const statsLocales = useMemo(() => {
+    // Si NO hay filtros locales, usar las estadísticas principales para mantener sincronización
+    if (!filtros.fechaInicio && !filtros.fechaFin && !filtros.fecha && !filtros.id && !filtros.nombre && !filtros.ejecutivo && !filtros.estado) {
+      console.log('📊 Usando estadísticas principales para sincronización')
+      return {
+        totalVentas: stats.totalVentas,
+        contratosListos: stats.contratosListos,
+        ventasPendientes: stats.ventasPendientes,
+        ventasRechazadas: stats.ventasRechazadas,
+        montoTotal: stats.montoTotal,
+        tasaAprobacion: stats.tasaAprobacion
+      }
+    }
+
+    // Si hay filtros activos, calcular estadísticas desde los datos filtrados
+    console.log('📊 Calculando estadísticas desde datos filtrados localmente')
+    const ventasActuales = ventasParaClientes
+
+    const contratosListos = ventasActuales.filter(v => {
+      if (!v.estado_crm) return false
+      const estadoLower = v.estado_crm.toLowerCase().trim()
+      return estadoLower.includes('listo') ||
+             estadoLower.includes('finalizado') ||
+             estadoLower.includes('completado') ||
+             estadoLower.includes('terminado') ||
+             estadoLower.includes('entregado')
+    }).length
+
+    const ventasPendientes = ventasActuales.filter(v => {
+      if (!v.estado_crm) return false
+      const estadoLower = v.estado_crm.toLowerCase().trim()
+      return estadoLower.includes('pendiente') ||
+             estadoLower.includes('proceso') ||
+             estadoLower.includes('revision') ||
+             estadoLower.includes('validacion') ||
+             estadoLower.includes('ingreso')
+    }).length
+
+    const ventasRechazadas = ventasActuales.filter(v => {
+      if (!v.estado_crm) return false
+      const estadoLower = v.estado_crm.toLowerCase().trim()
+      return estadoLower.includes('rechazad') ||
+             estadoLower.includes('cancelad') ||
+             estadoLower.includes('anulad')
+    }).length
+
+    const montoTotal = ventasActuales.reduce((sum, v) =>
+      sum + (typeof v.valor_total === 'number' ? v.valor_total : parseFloat(v.valor_total?.toString()) || 0), 0
+    )
+
+    return {
+      totalVentas: ventasActuales.length,
+      contratosListos,
+      ventasPendientes,
+      ventasRechazadas,
+      montoTotal,
+      tasaAprobacion: ventasActuales.length > 0 ? Math.round((contratosListos / ventasActuales.length) * 100) : 0
+    }
+  }, [ventasParaClientes, filtros, stats])
+
+  // Paginación de clientes filtrados
   const indiceInicial = (paginaActualClientes - 1) * clientesPorPagina
   const indiceFinal = indiceInicial + clientesPorPagina
-  const clientesPaginados = clientes.slice(indiceInicial, indiceFinal)
-  const totalPaginas = Math.ceil(clientes.length / clientesPorPagina)
+  const clientesPaginados = clientesFiltrados.slice(indiceInicial, indiceFinal)
+  const totalPaginas = Math.ceil(clientesFiltrados.length / clientesPorPagina)
+
+  // Función para descargar contratos en Excel
+  const descargarExcelContratos = useCallback(() => {
+    const datosContratos = clientesFiltrados.map(cliente => {
+      const venta = ventas.find(v => v.cliente_nombre === cliente.nombre)
+      return {
+        ID: cliente.id,
+        Cliente: formatClientName(cliente.nombre),
+        Estado: cliente.estado,
+        Ejecutivo: venta?.ejecutivo_nombre ? formatExecutiveName(cleanVendorName(venta.ejecutivo_nombre)) : 'Sin asignar',
+        'Fecha Ingreso': formatDate(cliente.fecha_ingreso),
+        'Valor Total': venta?.valor_total ? formatCurrency(venta.valor_total) : 'N/A',
+        'Teléfono': cliente.telefono || 'N/A',
+        'Email': cliente.email || 'N/A'
+      }
+    })
+
+    const csv = [
+      Object.keys(datosContratos[0] || {}).join(','),
+      ...datosContratos.map(row => Object.values(row).map(val => `"${val}"`).join(','))
+    ].join('\n')
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `contratos_${new Date().toISOString().split('T')[0]}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }, [clientesFiltrados, ventas])
+
+  // Función para descargar leads en Excel
+  const descargarExcelLeads = useCallback(() => {
+    const datosLeads = clientesFiltrados.filter(cliente =>
+      cliente.estado.toLowerCase().includes('lead') ||
+      cliente.estado.toLowerCase().includes('preingreso') ||
+      cliente.estado.toLowerCase().includes('ingreso')
+    ).map(cliente => {
+      const venta = ventas.find(v => v.cliente_nombre === cliente.nombre)
+      return {
+        ID: cliente.id,
+        Cliente: formatClientName(cliente.nombre),
+        Estado: cliente.estado,
+        Ejecutivo: venta?.ejecutivo_nombre ? formatExecutiveName(cleanVendorName(venta.ejecutivo_nombre)) : 'Sin asignar',
+        'Fecha Ingreso': formatDate(cliente.fecha_ingreso),
+        'Teléfono': cliente.telefono || 'N/A',
+        'Email': cliente.email || 'N/A',
+        'Fuente': venta?.fuente_lead || 'N/A'
+      }
+    })
+
+    const csv = [
+      Object.keys(datosLeads[0] || {}).join(','),
+      ...datosLeads.map(row => Object.values(row).map(val => `"${val}"`).join(','))
+    ].join('\n')
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `leads_${new Date().toISOString().split('T')[0]}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }, [clientesFiltrados, ventas])
+
+  // Handler para cambiar el número de elementos por página
+  const handleClientesPorPaginaChange = (nuevaCantidad: number | string) => {
+    if (nuevaCantidad === 'personalizado') {
+      setMostrarInputPersonalizado(true)
+      return
+    }
+    setMostrarInputPersonalizado(false)
+    setClientesPorPagina(Number(nuevaCantidad))
+    setPaginaActualClientes(1) // Reset a la primera página
+  }
+
+  // Handler para aplicar valor personalizado
+  const handleValorPersonalizadoSubmit = () => {
+    const valor = parseInt(valorPersonalizado)
+    if (valor && valor > 0 && valor <= 10000) { // Límite razonable
+      setClientesPorPagina(valor)
+      setPaginaActualClientes(1)
+      setMostrarInputPersonalizado(false)
+      setValorPersonalizado('')
+    }
+  }
+
+  // Handler para cancelar input personalizado
+  const handleCancelarPersonalizado = () => {
+    setMostrarInputPersonalizado(false)
+    setValorPersonalizado('')
+  }
+
+  // Función para generar números de página optimizada
+  const generarNumerosPagina = () => {
+    const maxPaginasVisibles = 7
+    const numeros: (number | string)[] = []
+
+    if (totalPaginas <= maxPaginasVisibles) {
+      // Si hay pocas páginas, mostrar todas
+      for (let i = 1; i <= totalPaginas; i++) {
+        numeros.push(i)
+      }
+    } else {
+      // Lógica para páginas largas
+      if (paginaActualClientes <= 4) {
+        // Cerca del inicio
+        for (let i = 1; i <= 5; i++) {
+          numeros.push(i)
+        }
+        numeros.push('...')
+        numeros.push(totalPaginas)
+      } else if (paginaActualClientes >= totalPaginas - 3) {
+        // Cerca del final
+        numeros.push(1)
+        numeros.push('...')
+        for (let i = totalPaginas - 4; i <= totalPaginas; i++) {
+          numeros.push(i)
+        }
+      } else {
+        // En el medio
+        numeros.push(1)
+        numeros.push('...')
+        for (let i = paginaActualClientes - 1; i <= paginaActualClientes + 1; i++) {
+          numeros.push(i)
+        }
+        numeros.push('...')
+        numeros.push(totalPaginas)
+      }
+    }
+
+    return numeros
+  }
   
   // Paginación de ventas - ventas ya viene filtrada desde el componente padre
   const ventasParaMostrar = ventas.filter((v: any) => !soloValidados || v.estado_crm?.toLowerCase().includes('validado') || v.estado_crm?.toLowerCase().includes('completado'))
@@ -708,7 +1296,7 @@ const DashboardOverview = ({
     <div className="space-y-6">
       <div className="mb-6 flex justify-between items-start">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">CRM inteligente ChileHome</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Información General de ventas</h1>
           <p className="text-gray-600">Validación de contratos</p>
         </div>
         
@@ -735,22 +1323,15 @@ const DashboardOverview = ({
                   return null;
                 })() : null}
                 onRangeChange={(startDate, endDate) => {
-                  const startString = startDate ? (() => {
-                    const year = startDate.getFullYear();
-                    const month = (startDate.getMonth() + 1).toString().padStart(2, '0');
-                    const day = startDate.getDate().toString().padStart(2, '0');
-                    return `${year}-${month}-${day}`;
-                  })() : ''
-                  
-                  const endString = endDate ? (() => {
-                    const year = endDate.getFullYear();
-                    const month = (endDate.getMonth() + 1).toString().padStart(2, '0');
-                    const day = endDate.getDate().toString().padStart(2, '0');
-                    return `${year}-${month}-${day}`;
-                  })() : ''
-                  
+                  if (!startDate || !endDate) return;
+
+                  const startString = `${startDate.getFullYear()}-${(startDate.getMonth() + 1).toString().padStart(2, '0')}-${startDate.getDate().toString().padStart(2, '0')}`
+                  const endString = `${endDate.getFullYear()}-${(endDate.getMonth() + 1).toString().padStart(2, '0')}-${endDate.getDate().toString().padStart(2, '0')}`
+
                   setFechaInicio(startString)
                   setFechaFin(endString)
+                  // Ejecutar búsqueda automáticamente cuando se aplica la selección de fechas
+                  fetchVentas(startString, endString, false, 'apply')
                 }}
                 minDate={new Date(fechaInicioProyecto)}
                 maxDate={new Date()}
@@ -761,7 +1342,6 @@ const DashboardOverview = ({
             <div className="flex gap-1">
               <button
                 onClick={() => {
-                  console.log('Aplicando filtro:', { fechaInicio, fechaFin })
                   fetchVentas(fechaInicio, fechaFin, false, 'apply')
                 }}
                 disabled={applyingFilter}
@@ -777,80 +1357,134 @@ const DashboardOverview = ({
               
               <button
                 onClick={() => {
-                  console.log('Reset a valores por defecto:', { fechaInicioProyecto, fechaFinPredeterminada })
-                  setFechaInicio(fechaInicioProyecto)
-                  setFechaFin(fechaFinPredeterminada)
-                  // Usar las fechas por defecto para hacer reset (1 sept hasta hoy)
-                  fetchVentas(fechaInicioProyecto, fechaFinPredeterminada, false, 'reset')
+                  // Restaurar a las fechas por defecto del proyecto (septiembre 2024)
+                  setFechaInicio(fechaInicioDefecto)
+                  setFechaFin(fechaFinDefecto)
+                  fetchVentas(fechaInicioDefecto, fechaFinDefecto, false, 'reset')
                 }}
                 disabled={resetting}
-                className={`px-3 py-1 rounded text-sm transition-all duration-200 flex items-center gap-1 ${
-                  resetting 
-                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed' 
+                className={`p-2 rounded text-sm transition-all duration-200 flex items-center justify-center ${
+                  resetting
+                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200 active:scale-95'
                 }`}
+                title="Limpiar y restaurar al período actual"
               >
-                {resetting && <Loader2 className="h-3 w-3 animate-spin" />}
-                {resetting ? 'Reseteando...' : 'Reset'}
+                {resetting ?
+                  <Loader2 className="h-4 w-4 animate-spin" /> :
+                  <RefreshCw className="h-4 w-4" />
+                }
               </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Métricas principales CRM */}
+      {/* Métricas principales CRM - Ancho total */}
       <div className="flex gap-4 w-full mb-8">
         {/* Ventas Totales */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex-1">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
+            <div className="w-12 h-12 bg-gray-700 rounded-full flex items-center justify-center flex-shrink-0">
               <BarChart3 className="h-6 w-6 text-white" />
             </div>
             <div className="min-w-0">
-              <p className="text-2xl font-bold text-gray-900">{stats.totalVentas.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-gray-900">{statsLocales.totalVentas.toLocaleString()}</p>
               <p className="text-sm text-gray-500">Ventas totales</p>
             </div>
           </div>
         </div>
 
-        {/* Ventas Pendientes */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex-1">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-yellow-500 rounded-full flex items-center justify-center flex-shrink-0">
-              <Clock className="h-6 w-6 text-white" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-2xl font-bold text-gray-900">{stats.ventasPendientes}</p>
-              <p className="text-sm text-gray-500">Pendiente contrato</p>
-            </div>
-          </div>
-        </div>
+        {/* Estados del CRM dinámicamente */}
+        {(() => {
+          // Agrupar ventas por estado
+          const estadosMap = new Map()
+          ventasParaClientes.forEach(venta => {
+            const estado = venta.estado_crm || 'Sin estado'
+            estadosMap.set(estado, (estadosMap.get(estado) || 0) + 1)
+          })
 
-        {/* Contratos Listos */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex-1">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0">
-              <CheckCircle className="h-6 w-6 text-white" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-2xl font-bold text-gray-900">{stats.contratosListos}</p>
-              <p className="text-sm text-gray-500">Contratos listos</p>
-            </div>
-          </div>
-        </div>
+          // Ordenar por cantidad de mayor a menor y tomar todos los estados
+          const estadosOrdenados = Array.from(estadosMap.entries())
+            .sort((a, b) => b[1] - a[1])
 
-        {/* Ventas Rechazadas */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex-1">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-red-500 rounded-full flex items-center justify-center flex-shrink-0">
-              <X className="h-6 w-6 text-white" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-2xl font-bold text-gray-900">{stats.ventasRechazadas}</p>
-              <p className="text-sm text-gray-500">Rechazadas</p>
-            </div>
-          </div>
-        </div>
+          return estadosOrdenados.map(([estado, cantidad]) => {
+            // Asignar colores según el estado - COLORES ESPECÍFICOS
+            let bgColor = 'bg-gray-500'
+            let icon = Clock
+
+            const estadoLower = estado.toLowerCase()
+
+            // Verde intenso para Entrega OK (100% completado)
+            if (estadoLower.includes('entrega ok')) {
+              bgColor = 'bg-green-600'
+              icon = CheckCircle
+            }
+            // Azul para Contratos (diferente de entrega)
+            else if (estadoLower.includes('contrato') ||
+                estadoLower.includes('listo') ||
+                estadoLower.includes('activ') ||
+                estadoLower.includes('aprob')) {
+              bgColor = 'bg-blue-500'
+              icon = CheckCircle
+            }
+            // Verde medio para Completados/Finalizados
+            else if (estadoLower.includes('completado') ||
+                estadoLower.includes('finalizado') ||
+                estadoLower.includes('entregado') ||
+                estadoLower.includes('terminado')) {
+              bgColor = 'bg-green-500'
+              icon = CheckCircle
+            }
+            // Naranja para Confirmación de entrega (en proceso)
+            else if (estadoLower.includes('confirmacion') ||
+                     estadoLower.includes('confirmación') ||
+                     (estadoLower.includes('entrega') && !estadoLower.includes('ok'))) {
+              bgColor = 'bg-orange-500'
+              icon = Clock
+            }
+            // Amarillo para Validación
+            else if (estadoLower.includes('validac') || estadoLower.includes('validando') || estadoLower.includes('revisión')) {
+              bgColor = 'bg-yellow-500'
+              icon = Clock
+            }
+            // Púrpura para Pre ingreso o Ingreso
+            else if (estadoLower.includes('pre') || estadoLower.includes('ingreso')) {
+              bgColor = 'bg-purple-500'
+              icon = UserIcon
+            }
+            // Rojo para Rechazo
+            else if (estadoLower.includes('rechaz') || estadoLower.includes('cancel') || estadoLower.includes('anulad')) {
+              bgColor = 'bg-red-500'
+              icon = X
+            }
+            // Otros estados
+            else if (estadoLower.includes('proceso') || estadoLower.includes('tramite')) {
+              bgColor = 'bg-purple-500'
+              icon = Loader2
+            }
+            else if (estadoLower.includes('pendiente')) {
+              bgColor = 'bg-orange-500'
+              icon = AlertCircle
+            }
+
+            const IconComponent = icon
+
+            return (
+              <div key={estado} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex-1">
+                <div className="flex items-center gap-3">
+                  <div className={`w-12 h-12 ${bgColor} rounded-full flex items-center justify-center flex-shrink-0`}>
+                    <IconComponent className="h-6 w-6 text-white" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-2xl font-bold text-gray-900">{cantidad}</p>
+                    <p className="text-sm text-gray-500 truncate" title={estado}>{estado}</p>
+                  </div>
+                </div>
+              </div>
+            )
+          })
+        })()}
       </div>
 
       {/* Resumen financiero */}
@@ -861,48 +1495,128 @@ const DashboardOverview = ({
             <p className="text-sm text-gray-600">Monto total de ventas en el rango seleccionado</p>
           </div>
           <div className="text-right">
-            <p className="text-3xl font-bold text-blue-600">{formatCurrency(stats.montoTotal)}</p>
-            <p className="text-sm text-gray-500">Tasa de aprobación: {stats.tasaAprobacion}%</p>
+            <p className="text-3xl font-bold text-blue-600">{formatCurrency(statsLocales.montoTotal)}</p>
+            <p className="text-sm text-gray-500">Tasa de aprobación: {statsLocales.tasaAprobacion}%</p>
           </div>
         </div>
       </div>
 
       {/* Gestión de Clientes */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-semibold text-gray-900">Gestión de Clientes</h2>
-            <div className="flex items-center gap-3">
-              <div className="relative">
-                <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Buscar cliente..."
-                  className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-              <button className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center gap-2">
-                <Plus className="h-4 w-4" />
-                Nuevo Cliente
-              </button>
+      <div className="bg-white rounded-xl border border-gray-200 p-6 mb-8">
+          <div className="flex items-start justify-between mb-6">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">Gestión de Clientes</h2>
+              <p className="text-sm text-gray-500">Administra y monitorea todos tus clientes</p>
+            </div>
+
+            {/* Filtros en la misma línea */}
+            <div className="flex items-center gap-3 p-4 bg-blue-50 border-2 border-blue-200 rounded-xl flex-wrap">
+                <div className="relative w-32">
+                  <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-blue-500" />
+                  <input
+                    type="text"
+                    placeholder="ID..."
+                    value={filtros.id}
+                    onChange={(e) => setFiltros(prev => ({ ...prev, id: e.target.value }))}
+                    className="pl-10 pr-4 py-2 border-2 border-blue-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-full bg-white shadow-sm"
+                  />
+                </div>
+
+                <div className="relative w-40">
+                  <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-blue-500" />
+                  <input
+                    type="text"
+                    placeholder="Nombre..."
+                    value={filtros.nombre}
+                    onChange={(e) => setFiltros(prev => ({ ...prev, nombre: e.target.value }))}
+                    className="pl-10 pr-4 py-2 border-2 border-blue-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-full bg-white shadow-sm"
+                  />
+                </div>
+
+                <div className="relative w-36">
+                  <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-blue-500" />
+                  <input
+                    type="text"
+                    placeholder="Ejecutivo..."
+                    value={filtros.ejecutivo}
+                    onChange={(e) => setFiltros(prev => ({ ...prev, ejecutivo: e.target.value }))}
+                    className="pl-10 pr-4 py-2 border-2 border-blue-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-full bg-white shadow-sm"
+                  />
+                </div>
+
+                <div className="relative min-w-[200px]">
+                  <Filter className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-blue-500 z-10" />
+                  <select
+                    value={filtros.estado}
+                    onChange={(e) => setFiltros(prev => ({ ...prev, estado: e.target.value }))}
+                    className="pl-10 pr-8 py-2 border-2 border-blue-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-full appearance-none bg-white hover:border-blue-400 transition-colors cursor-pointer shadow-sm text-gray-700"
+                    style={{
+                      backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23007BFF' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
+                      backgroundRepeat: 'no-repeat',
+                      backgroundPosition: 'right 0.5rem center',
+                      backgroundSize: '1.2em 1.2em'
+                    }}
+                  >
+                    <option value="">Todos los estados</option>
+                    {estadosUnicos.map(estado => (
+                      <option key={estado} value={estado}>{estado}</option>
+                    ))}
+                  </select>
+                  {filtros.estado && (
+                    <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center font-bold pulse">
+                      ✓
+                    </span>
+                  )}
+                </div>
+
+
+                <button
+                  onClick={() => setFiltros({ id: '', nombre: '', ejecutivo: '', estado: '', fecha: '', fechaInicio: '', fechaFin: '' })}
+                  className="p-2 text-gray-600 bg-white hover:bg-gray-100 border border-gray-300 rounded-lg transition-colors"
+                  title="Limpiar filtros"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+
+                <button
+                  onClick={() => descargarExcelContratos()}
+                  className="p-2 text-green-600 bg-white hover:bg-green-50 border border-gray-300 rounded-lg transition-colors"
+                  title="Descargar contratos en Excel"
+                >
+                  <Download className="h-4 w-4" />
+                </button>
+
+                <button
+                  onClick={() => descargarExcelLeads()}
+                  className="p-2 text-blue-600 bg-white hover:bg-blue-50 border border-gray-300 rounded-lg transition-colors"
+                  title="Descargar leads en Excel"
+                >
+                  <FileSpreadsheet className="h-4 w-4" />
+                </button>
+
+                {(filtros.id || filtros.nombre || filtros.ejecutivo || filtros.estado || filtros.fecha || filtros.fechaInicio || filtros.fechaFin) && (
+                  <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                    {clientesFiltrados.length} resultado{clientesFiltrados.length !== 1 ? 's' : ''}
+                  </span>
+                )}
             </div>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto bg-gray-50 rounded-lg p-1">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-gray-200 text-left">
-                  <th className="pb-3 text-sm font-medium text-gray-600">Cliente</th>
-                  <th className="pb-3 text-sm font-medium text-gray-600">Email</th>
-                  <th className="pb-3 text-sm font-medium text-gray-600">Estado</th>
-                  <th className="pb-3 text-sm font-medium text-gray-600">Fecha Ingreso</th>
-                  <th className="pb-3 text-sm font-medium text-gray-600">Fecha Despacho</th>
-                  <th className="pb-3 text-sm font-medium text-gray-600">Acciones</th>
+                <tr className="bg-gray-100 rounded-lg">
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 rounded-l-lg">Cliente</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Estado</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Ejecutivo</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700">Fecha Ingreso</th>
+                  <th className="px-6 py-4 text-center text-sm font-semibold text-gray-700 rounded-r-lg">Acciones</th>
                 </tr>
               </thead>
               <tbody>
                 {clientesLoading ? (
                   <tr>
-                    <td colSpan={6} className="py-8 text-center">
+                    <td colSpan={5} className="py-8 text-center">
                       <div className="flex items-center justify-center">
                         <Loader2 className="h-6 w-6 animate-spin text-blue-600 mr-2" />
                         <span className="text-gray-500">Cargando clientes...</span>
@@ -911,7 +1625,7 @@ const DashboardOverview = ({
                   </tr>
                 ) : clientesError ? (
                   <tr>
-                    <td colSpan={6} className="py-8 text-center">
+                    <td colSpan={5} className="py-8 text-center">
                       <div className="text-red-600">
                         <AlertCircle className="h-6 w-6 mx-auto mb-2" />
                         <p>{clientesError}</p>
@@ -925,42 +1639,120 @@ const DashboardOverview = ({
                     </td>
                   </tr>
                 ) : clientesPaginados.length > 0 ? (
-                  clientesPaginados.map((cliente) => (
-                    <tr key={cliente.id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="py-4">
+                  clientesPaginados.map((cliente, index) => (
+                    <tr key={cliente.id} className="bg-white hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-b-0">
+                      <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                            <UserIcon className="h-4 w-4 text-blue-600" />
+                          <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">
+                            <UserIcon className="h-5 w-5 text-gray-600" />
                           </div>
-                          <span className="font-medium text-gray-900">{formatName(cliente.nombre)}</span>
+                          <div className="flex flex-col">
+                            <span className="font-medium text-gray-900">
+                              <span className="text-xs text-gray-500 font-normal">ID {cliente.crm_id || cliente.id}:</span> {formatClientName(cliente.nombre)}
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              {cliente.rut ? `RUT: ${cliente.rut}` : ''}
+                            </span>
+                          </div>
                         </div>
                       </td>
-                      <td className="py-4 text-gray-600">
-                        {cliente.email || (
-                          <span className="text-gray-400 ">Falta correo</span>
-                        )}
-                      </td>
-                      <td className="py-4">
-                        <span className={`inline-flex items-center px-3 py-1 rounded-md text-xs font-medium border ${getEstadoColor(cliente.estado)}`}>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex items-center px-3 py-2 rounded-lg text-sm font-semibold border-2 ${getEstadoColor(cliente.estado)}`}>
                           {cliente.estado}
                         </span>
                       </td>
-                      <td className="py-4 text-gray-600">
-                        {formatDate(cliente.fecha_ingreso)}
+                      <td className="px-6 py-4">
+                        <span className="text-gray-900">
+                          {(() => {
+                            const venta = ventas.find(v => v.cliente_nombre === cliente.nombre);
+                            const ejecutivo = venta?.ejecutivo_nombre;
+                            return ejecutivo ? formatExecutiveName(cleanVendorName(ejecutivo)) : 'Sin asignar';
+                          })()}
+                        </span>
                       </td>
-                      <td className="py-4 text-gray-600">
-                        {formatDate(cliente.fecha_despacho)}
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col">
+                          <span className="text-gray-900">{formatDate(cliente.fecha_ingreso)}</span>
+                          <span className="text-xs text-gray-500">
+                            {(() => {
+                              if (!cliente.fecha_ingreso) return '';
+
+                              try {
+                                // Si la fecha contiene hora (formato: "YYYY-MM-DD HH:MM:SS" o similar)
+                                const fechaStr = String(cliente.fecha_ingreso);
+
+                                // Si incluye espacio, probablemente tiene hora
+                                if (fechaStr.includes(' ')) {
+                                  const partes = fechaStr.split(' ');
+                                  if (partes.length >= 2) {
+                                    const hora = partes[1];
+                                    // Si es formato HH:MM:SS, tomar solo HH:MM
+                                    return hora.substring(0, 5);
+                                  }
+                                }
+
+                                // Si es formato ISO con T
+                                if (fechaStr.includes('T')) {
+                                  const fecha = new Date(fechaStr);
+                                  if (!isNaN(fecha.getTime())) {
+                                    return fecha.toLocaleTimeString('es-CL', {
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    });
+                                  }
+                                }
+
+                                return '';
+                              } catch (e) {
+                                return '';
+                              }
+                            })()}
+                          </span>
+                        </div>
                       </td>
-                      <td className="py-4">
-                        <div className="flex items-center gap-2">
-                          <button className="p-1.5 text-gray-400 hover:text-blue-600 transition-colors">
-                            <Eye className="h-4 w-4" />
+                      <td className="px-6 py-4">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            className="p-2 text-blue-500 hover:text-blue-700 hover:bg-blue-100 rounded-lg transition-all duration-200 transform hover:scale-110"
+                            title="Ver detalles del cliente"
+                            onClick={() => {
+                              // Buscar el contrato asociado al cliente
+                              const venta = ventas.find(v => v.cliente_nombre === cliente.nombre);
+                              if (venta?.id) {
+                                window.open(`/previsualizador/${venta.id}`, '_blank');
+                              } else {
+                                alert('No se encontró contrato asociado a este cliente');
+                              }
+                            }}
+                          >
+                            <Eye className="h-5 w-5" />
                           </button>
-                          <button className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors">
-                            <Mail className="h-4 w-4" />
+                          <button
+                            className="p-2 text-purple-500 hover:text-purple-700 hover:bg-purple-100 rounded-lg transition-all duration-200 transform hover:scale-110"
+                            title="Enviar email al cliente"
+                            onClick={() => {
+                              if (cliente.email) {
+                                window.open(`mailto:${cliente.email}?subject=Consulta sobre su proyecto`, '_blank');
+                              } else {
+                                alert('No hay email registrado para este cliente');
+                              }
+                            }}
+                          >
+                            <Mail className="h-5 w-5" />
                           </button>
-                          <button className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors">
-                            <Edit className="h-4 w-4" />
+                          <button
+                            className="p-2 text-green-500 hover:text-green-700 hover:bg-green-100 rounded-lg transition-all duration-200 transform hover:scale-110"
+                            title="Editar información del cliente"
+                            onClick={() => {
+                              const venta = ventas.find(v => v.cliente_nombre === cliente.nombre);
+                              if (venta?.id) {
+                                window.open(`/editor/${venta.id}`, '_blank');
+                              } else {
+                                alert('No se puede editar: no se encontró contrato asociado');
+                              }
+                            }}
+                          >
+                            <Edit className="h-5 w-5" />
                           </button>
                         </div>
                       </td>
@@ -977,53 +1769,117 @@ const DashboardOverview = ({
             </table>
           </div>
 
-          {/* Paginación funcional */}
-          {totalPaginas > 1 && (
-            <div className="flex items-center justify-between mt-6">
-              <div className="text-sm text-gray-600">
-                Mostrando {indiceInicial + 1} a {Math.min(indiceFinal, clientes.length)} de {clientes.length} clientes
+          {/* Selector de elementos por página y paginación */}
+          <div className="bg-gray-50 rounded-lg p-6 mt-8">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-6">
+                <div className="text-sm text-gray-700 bg-white px-4 py-2 rounded-lg border border-gray-200">
+                  Mostrando <span className="font-bold text-gray-900">{indiceInicial + 1}</span> a <span className="font-bold text-gray-900">{Math.min(indiceFinal, clientesFiltrados.length)}</span> de <span className="font-bold text-gray-900">{clientesFiltrados.length}</span> clientes
+                  {clientesFiltrados.length !== clientes.length && (
+                    <span className="text-gray-500 text-xs ml-2">({clientes.length} total)</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  <label className="text-sm font-semibold text-gray-700">Mostrar:</label>
+                  {!mostrarInputPersonalizado ? (
+                    <>
+                      <select
+                        value={clientesPorPagina}
+                        onChange={(e) => handleClientesPorPaginaChange(e.target.value)}
+                        className="px-4 py-2 border-2 border-gray-300 bg-white text-gray-700 font-medium rounded-lg text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-colors"
+                      >
+                      <option value={5}>5</option>
+                      <option value={10}>10</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                      <option value={500}>500</option>
+                      <option value="personalizado">Personalizado...</option>
+                    </select>
+                    <span className="text-sm font-medium text-gray-700">por página</span>
+                  </>
+                ) : (
+                  <>
+                    <input
+                      type="number"
+                      value={valorPersonalizado}
+                      onChange={(e) => setValorPersonalizado(e.target.value)}
+                      placeholder="Ingresa cantidad"
+                      min="1"
+                      max="10000"
+                      className="px-3 py-2 border-2 border-blue-400 rounded-lg text-sm font-medium w-32 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      onKeyPress={(e) => e.key === 'Enter' && handleValorPersonalizadoSubmit()}
+                      autoFocus
+                    />
+                    <button
+                      onClick={handleValorPersonalizadoSubmit}
+                      className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+                    >
+                      ✓
+                    </button>
+                    <button
+                      onClick={handleCancelarPersonalizado}
+                      className="px-3 py-2 bg-gray-400 text-white rounded-lg text-sm font-medium hover:bg-gray-500 transition-colors"
+                    >
+                      ✕
+                    </button>
+                    <span className="text-sm font-medium text-gray-700">por página</span>
+                  </>
+                )}
               </div>
-              <div className="flex items-center gap-2">
-                <button 
+            </div>
+            {totalPaginas > 1 && (
+              <div className="flex items-center gap-2 bg-white p-2 rounded-lg border border-gray-200">
+                <button
                   onClick={() => setPaginaActualClientes(prev => Math.max(1, prev - 1))}
                   disabled={paginaActualClientes === 1}
-                  className={`p-2 rounded-lg border border-gray-300 transition-colors ${
-                    paginaActualClientes === 1 
-                      ? 'text-gray-400 cursor-not-allowed' 
-                      : 'text-gray-600 hover:bg-gray-50'
+                  className={`p-2 rounded-lg transition-all duration-200 ${
+                    paginaActualClientes === 1
+                      ? 'text-gray-400 cursor-not-allowed bg-gray-100'
+                      : 'text-blue-600 hover:bg-blue-100 hover:scale-105'
                   }`}
                 >
                   <ChevronRight className="h-4 w-4 rotate-180" />
                 </button>
+
+                {generarNumerosPagina().map((item, index) => {
+                  if (item === '...') {
+                    return (
+                      <span key={`ellipsis-${index}`} className="px-3 py-2 text-gray-500 text-sm font-medium">
+                        ...
+                      </span>
+                    )
+                  }
+
+                  const numeroPagina = item as number
+                  return (
+                    <button
+                      key={numeroPagina}
+                      onClick={() => setPaginaActualClientes(numeroPagina)}
+                      className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
+                        paginaActualClientes === numeroPagina
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : 'text-gray-700 hover:bg-gray-50 border border-gray-300 bg-white shadow-sm hover:border-gray-400'
+                      }`}
+                    >
+                      {numeroPagina}
+                    </button>
+                  )
+                })}
                 
-                {Array.from({ length: totalPaginas }, (_, i) => i + 1).map(numeroPagina => (
-                  <button
-                    key={numeroPagina}
-                    onClick={() => setPaginaActualClientes(numeroPagina)}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      paginaActualClientes === numeroPagina 
-                        ? 'bg-blue-600 text-white' 
-                        : 'text-gray-600 hover:bg-gray-50'
-                    }`}
-                  >
-                    {numeroPagina}
-                  </button>
-                ))}
-                
-                <button 
+                <button
                   onClick={() => setPaginaActualClientes(prev => Math.min(totalPaginas, prev + 1))}
                   disabled={paginaActualClientes === totalPaginas}
-                  className={`p-2 rounded-lg border border-gray-300 transition-colors ${
-                    paginaActualClientes === totalPaginas 
-                      ? 'text-gray-400 cursor-not-allowed' 
-                      : 'text-gray-600 hover:bg-gray-50'
+                  className={`p-2 rounded-lg transition-all duration-200 ${
+                    paginaActualClientes === totalPaginas
+                      ? 'text-gray-400 cursor-not-allowed bg-gray-100'
+                      : 'text-blue-600 hover:bg-blue-100 hover:scale-105'
                   }`}
                 >
                   <ChevronRight className="h-4 w-4" />
                 </button>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
       {/* Sección de gráficos */}
@@ -1150,38 +2006,40 @@ const DashboardOverview = ({
         </div>
       </div>
     </div>
+  </div>
   )
 }
 
 // Componente para la sección de contratos
-const ContratosSection = ({ 
-  ventas, 
-  setVentas,
-  loading, 
-  filtering,
-  setFiltering,
-  error,
-  fechaInicio,
-  fechaFin,
-  setFechaInicio,
-  setFechaFin,
-  fetchVentas,
-  setShowValidationModal,
-  setSelectedVenta,
-  setShowDetallesModal,
-  soloValidados,
-  setSoloValidados,
-  fechaInicioProyecto,
-  fechaHoy,
-  generatingContractId,
-  handleGenerarContrato,
-  contractFilters,
-  setContractFilters,
-  setShowContractPreview,
-  paginaActualVentas,
-  setPaginaActualVentas,
-  setShowDeleteModal
-}: any) => {
+const ContratosSection = (props: any) => {
+  const {
+    ventas,
+    setVentas,
+    loading,
+    filtering,
+    setFiltering,
+    error,
+    fechaInicio,
+    fechaFin,
+    setFechaInicio,
+    setFechaFin,
+    fetchVentas,
+    setShowValidationModal,
+    setSelectedVenta,
+    setShowDetallesModal,
+    soloValidados,
+    setSoloValidados,
+    fechaInicioProyecto,
+    fechaHoy,
+    generatingContractId,
+    handleGenerarContrato,
+    contractFilters,
+    setContractFilters,
+    setShowContractPreview,
+    paginaActualVentas,
+    setPaginaActualVentas,
+    setShowDeleteModal
+  } = props
   // Estados para paginación de ventas (usando el estado del componente padre)
   const ventasPorPagina = 5
   
@@ -1358,13 +2216,8 @@ const ContratosSection = ({
                     
                     setFechaInicio(startString)
                     setFechaFin(endString)
-                    
-                    // Auto-actualizar cuando se selecciona el rango completo
-                    if (startString && endString) {
-                      setTimeout(() => {
-                        fetchVentas(startString, endString, false, 'auto')
-                      }, 500)
-                    }
+                    // Ejecutar búsqueda automáticamente cuando se aplica la selección de fechas
+                    fetchVentas(startString, endString, false, 'apply')
                   }}
                   minDate={new Date(fechaInicioProyecto)}
                   maxDate={new Date()}
@@ -1394,15 +2247,16 @@ const ContratosSection = ({
               {/* Botón Reset */}
               <button
                 onClick={() => {
-                  setFechaInicio(fechaInicioProyecto)
-                  setFechaFin(fechaHoy)
+                  // Restaurar a las fechas por defecto del proyecto (septiembre 2024)
+                  setFechaInicio(fechaInicioDefecto)
+                  setFechaFin(fechaFinDefecto)
                   setSoloValidados(false)
-                  fetchVentas(fechaInicioProyecto, fechaHoy, false, 'reset')
+                  fetchVentas(fechaInicioDefecto, fechaFinDefecto, false, 'reset')
                 }}
-                className="px-4 py-2 bg-gray-100 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-200 transition-all duration-200 text-sm font-medium"
-                title="Restaurar período original"
+                className="p-2 bg-gray-100 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-200 transition-all duration-200 text-sm font-medium flex items-center justify-center"
+                title="Limpiar y restaurar al período actual"
               >
-                Restaurar
+                <RefreshCw className="h-4 w-4" />
               </button>
             </div>
           </div>
@@ -1765,27 +2619,31 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
     tasaAprobacion: 0,
     ingresosRecurrentes: 0
   })
-  const [dataLoaded, setDataLoaded] = useState(false)
   const [loading, setLoading] = useState(false) // Para carga inicial completa (con cargador)
   const [filtering, setFiltering] = useState(false) // Para filtros (sin cargador)
   const [applyingFilter, setApplyingFilter] = useState(false) // Para botón Aplicar
   const [resetting, setResetting] = useState(false) // Para botón Reset
   const [error, setError] = useState<string | null>(null)
-  // Define las fechas por defecto: AUTOMÁTICO - del día 1 del mes actual hasta hoy
+  // Define las fechas por defecto: Usar datos del 2024 que es donde están las ventas del CRM
   const ahora = new Date()
+
+  // Para compatibilidad con el resto del código que usa fechaHoy
   const fechaHoy = new Date(ahora.getTime() - (ahora.getTimezoneOffset() * 60000)).toISOString().split('T')[0]
-  
-  // Calcular automáticamente el primer día del mes actual
-  const primerDiaDelMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1)
-  const fechaInicioProyecto = new Date(primerDiaDelMes.getTime() - (primerDiaDelMes.getTimezoneOffset() * 60000)).toISOString().split('T')[0]
-  const fechaFinPredeterminada = fechaHoy // Hasta el día de hoy
-  
-  const [fechaInicio, setFechaInicio] = useState(fechaInicioProyecto)
-  const [fechaFin, setFechaFin] = useState(fechaFinPredeterminada)
+
+  // Para mostrar datos reales del CRM, usar fechas del 2024
+  // Septiembre 2024 tiene datos disponibles según el proyecto
+  const fechaInicioDefecto = '2024-09-01'  // Inicio de datos disponibles
+  const fechaFinDefecto = '2024-09-30'     // Fin de septiembre 2024
+
+  // Fecha de inicio del proyecto (para rangos expandidos cuando sea necesario)
+  const fechaInicioProyecto = '2024-09-01'
+
+  const [fechaInicio, setFechaInicio] = useState(fechaInicioDefecto) // Septiembre 2024
+  const [fechaFin, setFechaFin] = useState(fechaFinDefecto) // Hasta fin de septiembre 2024
   
   // Estados para el selector de fechas del equipo - usar la misma lógica que contratos
   const [fechaInicioEquipo, setFechaInicioEquipo] = useState(fechaInicioProyecto)
-  const [fechaFinEquipo, setFechaFinEquipo] = useState(fechaHoy)
+  const [fechaFinEquipo, setFechaFinEquipo] = useState(fechaFinDefecto)
   const [showValidationModal, setShowValidationModal] = useState(false)
   const [selectedVenta, setSelectedVenta] = useState<Venta | null>(null)
   const [vendedorSeleccionado, setVendedorSeleccionado] = useState('todos')
@@ -2237,40 +3095,28 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
         return []
       }
 
-      // Obtener clientes únicos de los datos de ventas del CRM
-      const clientesMap = new Map<string, Cliente>()
+      // NO agrupar por cliente - cada venta es una entrada separada
+      const clientesList: Cliente[] = []
 
       ventasData.forEach(venta => {
         try {
           if (!venta) return
 
-          const clienteKey = venta.cliente_rut || venta.cliente_nombre || `cliente_${Math.random()}`
-          if (!clientesMap.has(clienteKey)) {
-            // Mapear estado_crm a estados de cliente
-            let estado: 'Pendiente contrato' | 'Contrato activo' | 'Rechazado' = 'Pendiente contrato'
-            if (venta.estado_crm) {
-              const estadoLower = venta.estado_crm.toLowerCase()
-              if (estadoLower.includes('activ') || estadoLower.includes('aprob')) {
-                estado = 'Contrato activo'
-              } else if (estadoLower.includes('rechaz') || estadoLower.includes('cancel')) {
-                estado = 'Rechazado'
-              }
-            }
-
-            clientesMap.set(clienteKey, {
-              id: clienteKey,
-              nombre: venta.cliente_nombre || 'Sin nombre',
-              email: undefined, // CRM no tiene email
-              estado: estado,
-              fecha_ingreso: venta.fecha_venta,
-              fecha_despacho: venta.fecha_entrega,
-              telefono: venta.cliente_telefono,
-              rut: venta.cliente_rut,
-              direccion: venta.direccion_entrega,
-              created_at: venta.fecha_venta,
-              updated_at: new Date().toISOString()
-            })
-          }
+          // Crear una entrada por cada venta
+          clientesList.push({
+            id: venta.id,
+            nombre: venta.cliente_nombre || 'Sin nombre',
+            email: undefined, // CRM no tiene email
+            estado: venta.estado_crm || 'Ingreso', // Usar estado real del CRM
+            fecha_ingreso: venta.fecha_venta,
+            fecha_despacho: venta.fecha_entrega,
+            telefono: venta.cliente_telefono,
+            rut: venta.cliente_rut,
+            direccion: venta.direccion_entrega,
+            created_at: venta.fecha_venta,
+            updated_at: new Date().toISOString(),
+            crm_id: venta.id // Agregar ID del CRM
+          })
         } catch (ventaError) {
           console.error('Error processing individual venta in convertVentasToClientes:', ventaError)
           // Continue with next venta
@@ -2279,7 +3125,7 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
 
       // Ordenar por fecha más reciente - MOSTRAR TODOS LOS CONTRATOS
       try {
-        return Array.from(clientesMap.values())
+        return clientesList
           .sort((a, b) => {
             try {
               const dateA = new Date(b.fecha_ingreso || '1970-01-01').getTime()
@@ -2291,7 +3137,7 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
           })
       } catch (sortError) {
         console.error('Error sorting clients:', sortError)
-        return Array.from(clientesMap.values())
+        return clientesList
       }
     } catch (error) {
       console.error('Error in convertVentasToClientes:', error)
@@ -2493,6 +3339,13 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
 
   const fetchVentas = async (fechaInicio?: string, fechaFin?: string, isInitialLoad: boolean = false, buttonType?: 'apply' | 'reset') => {
     try {
+      console.log('🔥 fetchVentas llamada con:', {
+        fechaInicio,
+        fechaFin,
+        buttonType,
+        isInitialLoad
+      })
+
       if (isInitialLoad) {
         setLoading(true) // Mostrar cargador completo solo en carga inicial
       } else if (buttonType === 'apply') {
@@ -2503,10 +3356,10 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
         setFiltering(true) // Solo mostrar indicador de filtrado general
       }
       setError(null)
-      
+
       let url = '/api/crm/ventas'
       const params = new URLSearchParams()
-      
+
       if (fechaInicio) params.append('fecha_inicio', fechaInicio)
       if (fechaFin) params.append('fecha_fin', fechaFin)
       
@@ -2519,6 +3372,7 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
       const timeoutId = setTimeout(() => controller.abort(), 180000) // 3 minutos timeout
 
       try {
+        console.log('🌐 Llamando API:', url)
         const response = await fetch(url, {
           signal: controller.signal,
           headers: {
@@ -2799,13 +3653,10 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
     }
   }
 
-  // Cargar datos solo una vez al inicio
+  // Cargar datos automáticamente al inicializar el componente
   useEffect(() => {
-    if (!dataLoaded) {
-      fetchVentas(fechaInicio || undefined, fechaFin || undefined, true) // true = carga inicial solo la primera vez
-      setDataLoaded(true) // Marcar como cargado
-    }
-  }, [dataLoaded]) // Solo se ejecuta si no están cargados
+    fetchVentas(fechaInicio, fechaFin, true) // Cargar inmediatamente con fechas por defecto
+  }, []) // Solo se ejecuta una vez al montar el componente
 
   // Funcionalidad click-outside para cerrar sidebar
   useEffect(() => {
@@ -2827,16 +3678,7 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
     }
   }, [sidebarCollapsed])
 
-  // Actualizar clientes automáticamente cuando las ventas estén disponibles
-  useEffect(() => {
-    if (ventas && ventas.length > 0) {
-      setClientesLoading(true)
-      const clientesFromCRM = convertVentasToClientes(ventas)
-      setClientes(clientesFromCRM)
-      setClientesLoading(false)
-      setClientesError(null)
-    }
-  }, [ventas]) // Se ejecuta cuando ventas cambia
+  // Los clientes ahora se calculan dinámicamente con useMemo, no necesitamos este useEffect
 
   // Debug: Detectar cuando el usuario navega a la sección Equipo
   useEffect(() => {

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Calendar, ChevronDown, Filter, Search, Users, TrendingUp, Building, CheckCircle, Clock, AlertCircle, XCircle } from 'lucide-react'
+import { Calendar, ChevronDown, Filter, Search, Users, TrendingUp, Building, CheckCircle, Clock, AlertCircle, XCircle, Eye, Edit3, Trash2, Mail } from 'lucide-react'
 
 interface VentaCRM {
   id: string
@@ -101,6 +101,7 @@ export default function DashboardCRM() {
       case 'Confirmación de entrega':
         return 'bg-green-100 text-green-800 border-green-200'
       case 'Validación':
+      case 'Validacion':
         return 'bg-yellow-100 text-yellow-800 border-yellow-200'
       case 'Producción':
         return 'bg-blue-100 text-blue-800 border-blue-200'
@@ -117,6 +118,7 @@ export default function DashboardCRM() {
       case 'Confirmación de entrega':
         return <CheckCircle className="w-3 h-3" />
       case 'Validación':
+      case 'Validacion':
         return <Clock className="w-3 h-3" />
       case 'Producción':
         return <Building className="w-3 h-3" />
@@ -310,6 +312,7 @@ export default function DashboardCRM() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ejecutivo</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha Ingreso</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha Despacho</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
@@ -341,6 +344,9 @@ export default function DashboardCRM() {
                         <span className="ml-1">{venta.estado_crm}</span>
                       </span>
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
+                      {venta.ejecutivo_nombre || 'Sin asignar'}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {new Date(venta.fecha_venta).toLocaleDateString('es-CL')}
                     </td>
@@ -349,17 +355,37 @@ export default function DashboardCRM() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       <div className="flex space-x-2">
-                        <button className="text-gray-400 hover:text-gray-600">
-                          <span className="sr-only">Ver</span>
-                          👁️
+                        <button
+                          onClick={() => window.open(`/previsualizador/${venta.id}`, '_blank')}
+                          className="text-blue-400 hover:text-blue-600 p-1 rounded hover:bg-blue-50"
+                          title="Ver detalles"
+                        >
+                          <Eye className="w-4 h-4" />
                         </button>
-                        <button className="text-gray-400 hover:text-gray-600">
-                          <span className="sr-only">Editar</span>
-                          ✏️
+                        <button
+                          onClick={() => window.open(`/editor/${venta.id}`, '_blank')}
+                          className="text-green-400 hover:text-green-600 p-1 rounded hover:bg-green-50"
+                          title="Editar contrato"
+                        >
+                          <Edit3 className="w-4 h-4" />
                         </button>
-                        <button className="text-gray-400 hover:text-gray-600">
-                          <span className="sr-only">Eliminar</span>
-                          🗑️
+                        <button
+                          onClick={() => window.open(`mailto:${venta.cliente_correo}?subject=Consulta sobre su contrato`, '_blank')}
+                          className="text-purple-400 hover:text-purple-600 p-1 rounded hover:bg-purple-50"
+                          title="Enviar email"
+                        >
+                          <Mail className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (window.confirm(`¿Está seguro de eliminar el contrato de ${venta.cliente_nombre}?`)) {
+                              alert('Funcionalidad de eliminación no implementada')
+                            }
+                          }}
+                          className="text-red-400 hover:text-red-600 p-1 rounded hover:bg-red-50"
+                          title="Eliminar"
+                        >
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     </td>
@@ -371,22 +397,22 @@ export default function DashboardCRM() {
 
           {/* Paginación estilo Google Ads */}
           <div className="bg-white px-6 py-3 border-t border-gray-200 flex items-center justify-between">
-            <div className="flex items-center space-x-2 text-sm text-gray-700">
-              <span>Mostrando</span>
+            <div className="flex items-center space-x-2 text-sm">
+              <span className="text-gray-900 font-medium">Mostrando</span>
               <select
                 value={pageSize}
                 onChange={(e) => {
                   setPageSize(Number(e.target.value))
                   setCurrentPage(1)
                 }}
-                className="border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="border border-yellow-300 bg-yellow-50 text-yellow-800 font-semibold rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500"
               >
-                <option value={10}>10</option>
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-                <option value={100}>100</option>
+                <option value={10} className="text-gray-900 bg-white">10</option>
+                <option value={25} className="text-gray-900 bg-white">25</option>
+                <option value={50} className="text-gray-900 bg-white">50</option>
+                <option value={100} className="text-gray-900 bg-white">100</option>
               </select>
-              <span>de {resumenDiario?.ventas_detalle.length || 0} clientes</span>
+              <span className="text-gray-900 font-medium">de <span className="text-gray-900 font-bold">{resumenDiario?.ventas_detalle.length || 0}</span> clientes</span>
             </div>
 
             <div className="flex items-center space-x-2">
