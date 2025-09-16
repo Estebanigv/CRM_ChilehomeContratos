@@ -8,7 +8,7 @@ import {
   ArrowLeft, 
   Edit, 
   Download,
-  Send,
+  Share,
   FileText,
   Calendar,
   DollarSign,
@@ -206,7 +206,7 @@ export default function ContratoPrevisualizador({ contrato, user }: ContratoPrev
   }
 
   const canEdit = user.role === 'admin' || contrato.ejecutivo_id === user.id
-  const canSend = contrato.estado === 'validado' && canEdit
+  const canShare = contrato.estado === 'validado' && canEdit
 
   return (
     <div className="min-h-screen bg-base-200">
@@ -904,7 +904,7 @@ export default function ContratoPrevisualizador({ contrato, user }: ContratoPrev
               </div>
 
               {/* Right side button */}
-              {canSend && (
+              {canShare && (
                 <button
                   className="inline-flex items-center px-6 py-3 border border-transparent text-sm font-medium rounded-lg text-white bg-green-600 hover:bg-green-700 transition-colors shadow-md font-sans"
                   onClick={handleEnviarContrato}
@@ -920,7 +920,7 @@ export default function ContratoPrevisualizador({ contrato, user }: ContratoPrev
                     </>
                   ) : (
                     <>
-                      <Send className="w-4 h-4 mr-2" />
+                      <Share className="w-4 h-4 mr-2" />
                       Enviar a Cliente
                     </>
                   )}

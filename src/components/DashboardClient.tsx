@@ -1,19 +1,24 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
-import { 
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import {
   FileText, Plus, Settings, LogOut, Search, Filter, Download, Eye, Edit,
   Clock, CheckCircle, Send, Loader2, X, ChevronDown, AlertCircle,
   Phone, DollarSign, Calendar, MapPin, MessageSquare, User as UserIcon,
   BarChart3, Users, Truck, Home, TrendingUp, ArrowUpRight, ChevronRight,
-  Mail, MoreVertical, Save, AlertTriangle, Upload, ArrowLeft, Edit3, Trash2
+  Mail, MoreVertical, Save, AlertTriangle, Upload, ArrowLeft, Edit3, Trash2,
+  RefreshCw, Menu, ChevronLeft
 } from 'lucide-react'
 import ChileHomeLoader from './ChileHomeLoader'
 import ContratoPrevisualizador from './ContratoPrevisualizador'
 import CustomDatePicker from './CustomDatePicker'
 import FichasEliminadas from './FichasEliminadas'
+import ConfiguracionMensajes from './ConfiguracionMensajes'
+import ListadoPlanos from './ListadoPlanos'
+import CRMDashboard from './CRMDashboard'
 
 import { safeParseJSON, formatCurrency as formatCurrencyUtil, formatRUT as formatRUTUtil } from '@/lib/utils'
+import { fichasEliminadasStorage } from '@/lib/fichasEliminadasStorage'
 
 interface Venta {
   id: string
@@ -77,6 +82,30 @@ const formatCurrency = (amount: number): string => {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(amount)
+}
+
+const getRoleDisplay = (user: any): string => {
+  if (!user?.role) return 'Usuario'
+
+  // Caso especial: si es Esteban, siempre mostrar como Developer
+  if (user.nombre && user.nombre.toLowerCase() === 'esteban') {
+    return 'Desarrollador del Sistema'
+  }
+
+  switch (user.role) {
+    case 'developer':
+      return 'Desarrollador del Sistema'
+    case 'admin':
+      return 'Administrador'
+    case 'supervisor':
+      return 'Supervisor ChileHome'
+    case 'ejecutivo':
+      return 'Ejecutivo ChileHome'
+    case 'transportista':
+      return 'Transportista'
+    default:
+      return 'Usuario ChileHome'
+  }
 }
 
 // Función para formatear fechas en formato DD/MM/YYYY (día/mes/año)
@@ -337,29 +366,63 @@ const generateNextContractNumber = (ventas: any[]): string => {
   return newContractNumber
 }
 
-// Ejecutivos ChileHome (Empresa Matriz)
-const ejecutivosChileHome = [
-  { nombre: 'Claudia', telefono: '+56 9 5700 2339', empresa: 'ChileHome', iniciales: 'CL' },
-  { nombre: 'Gloria', telefono: '+56 9 3615 1999', empresa: 'ChileHome', iniciales: 'GL' },
-  { nombre: 'José Javier', telefono: '+56 9 6416 9548', empresa: 'ChileHome', iniciales: 'JJ' },
-  { nombre: 'Maria Jose', telefono: '+56 9 5416 4661', empresa: 'ChileHome', iniciales: 'MJ' },
-  { nombre: 'Milene', telefono: '+56 9 5700 2708', empresa: 'ChileHome', iniciales: 'ML' },
-  { nombre: 'Paola', telefono: '+56 9 5416 4667', empresa: 'ChileHome', iniciales: 'PA' },
-  { nombre: 'Rodolfo', telefono: '+56 9 6336 3074', empresa: 'ChileHome', iniciales: 'RO' },
-  { nombre: 'Victoria', telefono: '+56 9 5700 3370', empresa: 'ChileHome', iniciales: 'VI' }
+// Función para formatear nombres correctamente
+const formatearNombreVendedor = (nombre: string) => {
+  return nombre
+    .replace(' (Vendedor)', '')  // Quitar etiqueta (Vendedor)
+    .replace(/\s+/g, ' ')        // Normalizar espacios
+    .trim()
+    .toLowerCase()               // Todo en minúsculas
+    .split(' ')                  // Dividir por espacios
+    .map(palabra => palabra.charAt(0).toUpperCase() + palabra.slice(1)) // Primera letra mayúscula
+    .join(' ')                   // Unir de nuevo
+}
+
+// Función para obtener ejecutivos dinámicamente desde el CRM
+const obtenerEjecutivosDesdeCRM = (ventas: any[]) => {
+  // Obtener todos los vendedores únicos del CRM
+  const vendedoresUnicos = [...new Set(ventas.map((v: any) => v.ejecutivo_nombre).filter(Boolean))]
+  
+  // Mapear vendedores a empresas
+  const ejecutivosChileHome: any[] = []
+  const ejecutivosConstrumatter: any[] = []
+  
+  vendedoresUnicos.forEach((vendedor, index) => {
+    const nombreOriginalCRM = vendedor.trim()                    // Original del CRM para matching
+    const nombreFormateado = formatearNombreVendedor(vendedor)   // Formateado para mostrar
+    const nombreParaMatching = vendedor.trim().toLowerCase().replace(/\s+/g, ' ') // Para comparación
+    const iniciales = nombreFormateado.split(' ').map((p: string) => p.charAt(0)).join('').substring(0, 2)
+    
+    const ejecutivo = {
+      nombre: nombreParaMatching,           // Para matching en minúsculas
+      nombreOriginal: nombreOriginalCRM,   // Original del CRM
+      nombreDisplay: nombreFormateado,     // Formateado para mostrar
+      telefono: `+56 9 ${Math.floor(Math.random() * 90000000) + 10000000}`,
+      empresa: index % 2 === 0 ? 'ChileHome' : 'Construmatter',
+      iniciales: iniciales.toUpperCase()
+    }
+    
+    // Asignar a empresa (50% a cada una, o según otro criterio)
+    if (index % 2 === 0) {
+      ejecutivosChileHome.push(ejecutivo)
+    } else {
+      ejecutivosConstrumatter.push(ejecutivo)
+    }
+  })
+  
+  return { ejecutivosChileHome, ejecutivosConstrumatter }
+}
+
+// Por defecto, usar configuración estática (se actualiza dinámicamente)
+let ejecutivosChileHome = [
+  { nombre: 'JULIETA CARRASCO', telefono: '+56 9 4475 0786', empresa: 'ChileHome', iniciales: 'JU' },
+  { nombre: 'ANA MARIA GONZALEZ', telefono: '+56 9 5700 2841', empresa: 'ChileHome', iniciales: 'AM' },
+  { nombre: 'Johana Morales Ovalle', telefono: '+56 9 4431 8105', empresa: 'ChileHome', iniciales: 'JO' }
 ]
 
-// Ejecutivos ConstruMater (Filial)
-const ejecutivosConstruMater = [
-  { nombre: 'Alejandra', telefono: '+56 9 5700 2841', empresa: 'ConstruMater', iniciales: 'AL' },
-  { nombre: 'Andrea', telefono: '+56 9 8147 2140', empresa: 'ConstruMater', iniciales: 'AN' },
-  { nombre: 'Elena', telefono: '+56 9 3264 9028', empresa: 'ConstruMater', iniciales: 'EL' },
-  { nombre: 'Johanna', telefono: '+56 9 4431 8105', empresa: 'ConstruMater', iniciales: 'JH' },
-  { nombre: 'Julieta', telefono: '+56 9 4475 0786', empresa: 'ConstruMater', iniciales: 'JU' },
-  { nombre: 'Mauricio', telefono: '+56 9 7837 0261', empresa: 'ConstruMater', iniciales: 'MA' },
-  { nombre: 'Paulo', telefono: '+56 9 2617 8767', empresa: 'ConstruMater', iniciales: 'PL' },
-  { nombre: 'Rocio', telefono: '+56 9 7886 3930', empresa: 'ConstruMater', iniciales: 'RC' },
-  { nombre: 'Yoel', telefono: '+56 9 3629 8485', empresa: 'ConstruMater', iniciales: 'YO' }
+let ejecutivosConstruMater = [
+  { nombre: 'Claudia Huenteo', telefono: '+56 9 5700 2339', empresa: 'Construmatter', iniciales: 'CL' },
+  { nombre: 'MILENE SEPULVEDA', telefono: '+56 9 5700 2708', empresa: 'Construmatter', iniciales: 'ML' }
 ]
 
 // Todos los ejecutivos combinados
@@ -401,108 +464,156 @@ const ventasMensuales = [
   { mes: 'Jun', valor: 250000 }
 ]
 
-const Sidebar = ({ activeSection, setActiveSection }: { 
+const Sidebar = React.forwardRef<HTMLDivElement, {
   activeSection: string
-  setActiveSection: (section: string) => void 
-}) => (
-  <div className="fixed inset-y-0 left-0 w-64 bg-white shadow-lg border-r border-gray-200 z-30">
-    <div className="h-16 flex items-center px-6 border-b border-gray-200">
-      <div className="flex items-center gap-3">
-        <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-          <span className="text-white font-bold text-sm">CH</span>
+  setActiveSection: (section: string) => void
+  user: any
+  collapsed: boolean
+  toggleSidebar: () => void
+}>(({ activeSection, setActiveSection, user, collapsed, toggleSidebar }, ref) => (
+  <div ref={ref} className={`fixed inset-y-0 left-0 ${collapsed ? 'w-16' : 'w-64'} bg-white shadow-lg border-r border-gray-200 z-30 transition-all duration-300`}>
+    <div className={`h-16 flex items-center ${collapsed ? 'justify-center px-2' : 'justify-between px-6'} border-b border-gray-200`}>
+      {!collapsed && (
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+            <span className="text-white font-bold text-sm">CH</span>
+          </div>
+          <span className="text-xl font-bold text-gray-900">ChileHome</span>
         </div>
-        <span className="text-xl font-bold text-gray-900">ChileHome</span>
-      </div>
+      )}
+      <button
+        onClick={toggleSidebar}
+        className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+        title={collapsed ? 'Expandir menú' : 'Contraer menú'}
+      >
+        {collapsed ? <Menu className="h-5 w-5 text-gray-600" /> : <ChevronLeft className="h-5 w-5 text-gray-600" />}
+      </button>
     </div>
     
     <nav className="mt-6">
       <div className="px-3 space-y-1">
         <button
           onClick={() => setActiveSection('dashboard')}
-          className={`w-full flex items-center px-3 py-2.5 text-[14px] font-medium rounded-lg transition-colors duration-200 ${
+          className={`w-full flex items-center ${collapsed ? 'justify-center px-3 py-3' : 'px-3 py-2.5'} text-[14px] font-medium rounded-lg transition-colors duration-200 ${
             activeSection === 'dashboard'
               ? 'bg-blue-50 text-blue-700'
               : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
           }`}
+          title={collapsed ? 'Dashboard' : ''}
         >
-          <BarChart3 className="mr-3 h-5 w-5" />
-          Dashboard
+          <BarChart3 className={`h-5 w-5 ${collapsed ? '' : 'mr-3'}`} />
+          {!collapsed && 'Dashboard'}
         </button>
 
         <button
           onClick={() => setActiveSection('contratos')}
-          className={`w-full flex items-center px-3 py-2.5 text-[14px] font-medium rounded-lg transition-colors duration-200 ${
+          className={`w-full flex items-center ${collapsed ? 'justify-center px-3 py-3' : 'px-3 py-2.5'} text-[14px] font-medium rounded-lg transition-colors duration-200 ${
             activeSection === 'contratos'
               ? 'bg-blue-50 text-blue-700'
               : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
           }`}
+          title={collapsed ? 'Contratos' : ''}
         >
-          <FileText className="mr-3 h-5 w-5" />
-          Contratos
+          <FileText className={`h-5 w-5 ${collapsed ? '' : 'mr-3'}`} />
+          {!collapsed && 'Contratos'}
+        </button>
+
+        <button
+          onClick={() => setActiveSection('planos')}
+          className={`w-full flex items-center ${collapsed ? 'justify-center px-3 py-3' : 'px-3 py-2.5'} text-[14px] font-medium rounded-lg transition-colors duration-200 ${
+            activeSection === 'planos'
+              ? 'bg-blue-50 text-blue-700'
+              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+          }`}
+          title={collapsed ? 'Planos' : ''}
+        >
+          <Home className={`h-5 w-5 ${collapsed ? '' : 'mr-3'}`} />
+          {!collapsed && 'Planos'}
         </button>
 
         <button
           onClick={() => setActiveSection('logistica')}
-          className={`w-full flex items-center px-3 py-2.5 text-[14px] font-medium rounded-lg transition-colors duration-200 ${
+          className={`w-full flex items-center ${collapsed ? 'justify-center px-3 py-3' : 'px-3 py-2.5'} text-[14px] font-medium rounded-lg transition-colors duration-200 ${
             activeSection === 'logistica'
               ? 'bg-blue-50 text-blue-700'
               : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
           }`}
+          title={collapsed ? 'Logística CRM' : ''}
         >
-          <Truck className="mr-3 h-5 w-5" />
-          Logística CRM
+          <Truck className={`h-5 w-5 ${collapsed ? '' : 'mr-3'}`} />
+          {!collapsed && 'Logística CRM'}
         </button>
 
         <button
           onClick={() => setActiveSection('equipo')}
-          className={`w-full flex items-center px-3 py-2.5 text-[14px] font-medium rounded-lg transition-colors duration-200 ${
+          className={`w-full flex items-center ${collapsed ? 'justify-center px-3 py-3' : 'px-3 py-2.5'} text-[14px] font-medium rounded-lg transition-colors duration-200 ${
             activeSection === 'equipo'
               ? 'bg-blue-50 text-blue-700'
               : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
           }`}
+          title={collapsed ? 'Equipo' : ''}
         >
-          <Users className="mr-3 h-5 w-5" />
-          Equipo
+          <Users className={`h-5 w-5 ${collapsed ? '' : 'mr-3'}`} />
+          {!collapsed && 'Equipo'}
+        </button>
+
+        <button
+          onClick={() => setActiveSection('mensajes')}
+          className={`w-full flex items-center ${collapsed ? 'justify-center px-3 py-3' : 'px-3 py-2.5'} text-[14px] font-medium rounded-lg transition-colors duration-200 ${
+            activeSection === 'mensajes'
+              ? 'bg-blue-50 text-blue-700'
+              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+          }`}
+          title={collapsed ? 'Mensajes' : ''}
+        >
+          <MessageSquare className={`h-5 w-5 ${collapsed ? '' : 'mr-3'}`} />
+          {!collapsed && 'Mensajes'}
         </button>
 
         <button
           onClick={() => setActiveSection('configuracion')}
-          className={`w-full flex items-center px-3 py-2.5 text-[14px] font-medium rounded-lg transition-colors duration-200 ${
+          className={`w-full flex items-center ${collapsed ? 'justify-center px-3 py-3' : 'px-3 py-2.5'} text-[14px] font-medium rounded-lg transition-colors duration-200 ${
             activeSection === 'configuracion'
               ? 'bg-blue-50 text-blue-700'
               : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
           }`}
+          title={collapsed ? 'Configuración' : ''}
         >
-          <Settings className="mr-3 h-5 w-5" />
-          Configuración
+          <Settings className={`h-5 w-5 ${collapsed ? '' : 'mr-3'}`} />
+          {!collapsed && 'Configuración'}
         </button>
       </div>
     </nav>
 
     <div className="absolute bottom-0 w-full border-t border-gray-200">
       {/* Usuario Conectado */}
-      <div className="p-4 border-b border-gray-100">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
-            <span className="text-white font-semibold text-sm">E</span>
+      <div className={`${collapsed ? 'p-2' : 'p-4'} border-b border-gray-100`}>
+        <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3'}`}>
+          <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center" title={collapsed ? user?.nombre || 'Usuario' : ''}>
+            <span className="text-white font-semibold text-sm">{(user?.nombre || user?.email?.split('@')[0] || 'U').charAt(0).toUpperCase()}</span>
           </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium text-gray-900 truncate">Esteban</div>
-            <div className="text-xs text-gray-500 truncate">Ejecutivo ChileHome</div>
-          </div>
-          <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+          {!collapsed && (
+            <>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium text-gray-900 truncate">{user?.nombre || user?.email?.split('@')[0] || 'Usuario'}</div>
+                <div className="text-xs text-gray-500 truncate">{getRoleDisplay(user)}</div>
+              </div>
+              <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+            </>
+          )}
         </div>
       </div>
-      
-      <div className="p-4">
-        <button className="w-full flex items-center px-3 py-2 text-[14px] font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors duration-200">
-          <LogOut className="mr-3 h-5 w-5" />
-          Cerrar Sesión
+
+      <div className={collapsed ? 'p-2' : 'p-4'}>
+        <button className={`w-full flex items-center ${collapsed ? 'justify-center px-2 py-3' : 'px-3 py-2'} text-[14px] font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors duration-200`} title={collapsed ? 'Cerrar Sesión' : ''}>
+          <LogOut className={`h-5 w-5 ${collapsed ? '' : 'mr-3'}`} />
+          {!collapsed && 'Cerrar Sesión'}
         </button>
       </div>
     </div>
   </div>
-)
+))
+Sidebar.displayName = 'Sidebar'
 
 // Componente para el Dashboard Overview Ejecutivo
 const DashboardOverview = ({ 
@@ -1629,6 +1740,8 @@ const ContratosSection = ({
 export default function DashboardClient({ user, contratos }: { user: any, contratos: any[] }) {
   const [activeSection, setActiveSection] = useState('dashboard')
   const [contratosSubsection, setContratosSubsection] = useState('activos')
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const sidebarRef = useRef<HTMLDivElement>(null)
   const [showContractPreview, setShowContractPreview] = useState(false)
   const [contractFilters, setContractFilters] = useState({
     status: 'todos', // todos, borrador, validado, enviado, generado
@@ -1669,8 +1782,14 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
   
   const [fechaInicio, setFechaInicio] = useState(fechaInicioProyecto)
   const [fechaFin, setFechaFin] = useState(fechaFinPredeterminada)
+  
+  // Estados para el selector de fechas del equipo - usar la misma lógica que contratos
+  const [fechaInicioEquipo, setFechaInicioEquipo] = useState(fechaInicioProyecto)
+  const [fechaFinEquipo, setFechaFinEquipo] = useState(fechaHoy)
   const [showValidationModal, setShowValidationModal] = useState(false)
   const [selectedVenta, setSelectedVenta] = useState<Venta | null>(null)
+  const [vendedorSeleccionado, setVendedorSeleccionado] = useState('todos')
+  const [dropdownAbierto, setDropdownAbierto] = useState(false)
   const [validatingId, setValidatingId] = useState<string | null>(null)
   const [generatingContractId, setGeneratingContractId] = useState<string | null>(null)
   const [notification, setNotification] = useState<{ type: 'success' | 'error', message: string } | null>(null)
@@ -2112,44 +2231,72 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
 
   // Función para convertir datos de ventas del CRM a clientes
   const convertVentasToClientes = (ventasData: Venta[]): Cliente[] => {
-    // Obtener clientes únicos de los datos de ventas del CRM
-    const clientesMap = new Map<string, Cliente>()
-    
-    ventasData.forEach(venta => {
-      const clienteKey = venta.cliente_rut || venta.cliente_nombre
-      if (!clientesMap.has(clienteKey)) {
-        // Mapear estado_crm a estados de cliente
-        let estado: 'Pendiente contrato' | 'Contrato activo' | 'Rechazado' = 'Pendiente contrato'
-        if (venta.estado_crm?.toLowerCase().includes('activ') || venta.estado_crm?.toLowerCase().includes('aprob')) {
-          estado = 'Contrato activo'
-        } else if (venta.estado_crm?.toLowerCase().includes('rechaz') || venta.estado_crm?.toLowerCase().includes('cancel')) {
-          estado = 'Rechazado'
-        }
-
-        // Debug: Log completo de la venta para ver todas las fechas disponibles
-        if (venta.cliente_nombre?.toLowerCase().includes('alejandra')) {
-          console.log(`🔍 DATOS COMPLETOS DE VENTA (${venta.cliente_nombre}):`, venta)
-        }
-
-        clientesMap.set(clienteKey, {
-          id: clienteKey,
-          nombre: venta.cliente_nombre,
-          email: undefined, // CRM no tiene email
-          estado: estado,
-          fecha_ingreso: venta.fecha_venta,
-          fecha_despacho: venta.fecha_entrega,
-          telefono: venta.cliente_telefono,
-          rut: venta.cliente_rut,
-          direccion: venta.direccion_entrega,
-          created_at: venta.fecha_venta,
-          updated_at: new Date().toISOString()
-        })
+    try {
+      if (!ventasData || !Array.isArray(ventasData)) {
+        console.warn('convertVentasToClientes: ventasData is not a valid array')
+        return []
       }
-    })
-    
-    // Ordenar por fecha más reciente - MOSTRAR TODOS LOS CONTRATOS
-    return Array.from(clientesMap.values())
-      .sort((a, b) => new Date(b.fecha_ingreso).getTime() - new Date(a.fecha_ingreso).getTime())
+
+      // Obtener clientes únicos de los datos de ventas del CRM
+      const clientesMap = new Map<string, Cliente>()
+
+      ventasData.forEach(venta => {
+        try {
+          if (!venta) return
+
+          const clienteKey = venta.cliente_rut || venta.cliente_nombre || `cliente_${Math.random()}`
+          if (!clientesMap.has(clienteKey)) {
+            // Mapear estado_crm a estados de cliente
+            let estado: 'Pendiente contrato' | 'Contrato activo' | 'Rechazado' = 'Pendiente contrato'
+            if (venta.estado_crm) {
+              const estadoLower = venta.estado_crm.toLowerCase()
+              if (estadoLower.includes('activ') || estadoLower.includes('aprob')) {
+                estado = 'Contrato activo'
+              } else if (estadoLower.includes('rechaz') || estadoLower.includes('cancel')) {
+                estado = 'Rechazado'
+              }
+            }
+
+            clientesMap.set(clienteKey, {
+              id: clienteKey,
+              nombre: venta.cliente_nombre || 'Sin nombre',
+              email: undefined, // CRM no tiene email
+              estado: estado,
+              fecha_ingreso: venta.fecha_venta,
+              fecha_despacho: venta.fecha_entrega,
+              telefono: venta.cliente_telefono,
+              rut: venta.cliente_rut,
+              direccion: venta.direccion_entrega,
+              created_at: venta.fecha_venta,
+              updated_at: new Date().toISOString()
+            })
+          }
+        } catch (ventaError) {
+          console.error('Error processing individual venta in convertVentasToClientes:', ventaError)
+          // Continue with next venta
+        }
+      })
+
+      // Ordenar por fecha más reciente - MOSTRAR TODOS LOS CONTRATOS
+      try {
+        return Array.from(clientesMap.values())
+          .sort((a, b) => {
+            try {
+              const dateA = new Date(b.fecha_ingreso || '1970-01-01').getTime()
+              const dateB = new Date(a.fecha_ingreso || '1970-01-01').getTime()
+              return dateA - dateB
+            } catch (sortError) {
+              return 0
+            }
+          })
+      } catch (sortError) {
+        console.error('Error sorting clients:', sortError)
+        return Array.from(clientesMap.values())
+      }
+    } catch (error) {
+      console.error('Error in convertVentasToClientes:', error)
+      return []
+    }
   }
 
   // Función para cargar clientes del CRM (ahora usa datos del CRM en lugar de Supabase)
@@ -2284,40 +2431,52 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
     setDeletingId(venta.id)
     
     try {
-      const response = await fetch(`/api/crm/ventas/${venta.id}`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          datosVenta: venta,
-          motivoEliminacion: 'Eliminado desde dashboard'
+      // Guardar en almacenamiento persistente local
+      fichasEliminadasStorage.addFichaEliminada(
+        venta.id,
+        venta,
+        'Eliminado desde dashboard'
+      )
+      
+      // Intentar guardar en el servidor (opcional, puede fallar)
+      try {
+        const response = await fetch(`/api/crm/ventas/${venta.id}`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            datosVenta: venta,
+            motivoEliminacion: 'Eliminado desde dashboard'
+          })
         })
+        
+        if (!response.ok) {
+          console.warn('El servidor no pudo procesar la eliminación, pero se guardó localmente')
+        }
+      } catch (fetchError) {
+        console.warn('Error al comunicar con el servidor, ficha guardada localmente:', fetchError)
+      }
+      
+      // Eliminar de la lista local
+      setVentas(prev => prev.filter((v: any) => v.id !== venta.id))
+      setClientes(prev => prev.filter((c: any) => c.id !== venta.id))
+      
+      // Mostrar notificación de éxito
+      setNotification({
+        type: 'success',
+        message: `Contrato de ${venta.cliente_nombre} eliminado exitosamente`
       })
       
-      if (response.ok) {
-        // Eliminar de la lista local
-        setVentas(prev => prev.filter((v: any) => v.id !== venta.id))
-        setClientes(prev => prev.filter((c: any) => c.id !== venta.id))
-        
-        // Mostrar notificación de éxito
-        setNotification({
-          type: 'success',
-          message: `Contrato de ${venta.cliente_nombre} eliminado exitosamente`
-        })
-        
-        // Cerrar modales
-        setShowDeleteModal(false)
-        setSelectedVenta(null)
-        
-        // Limpiar notificación después de 3 segundos
-        setTimeout(() => {
-          setNotification(null)
-        }, 3000)
-      } else {
-        const errorData = await safeParseJSON(response)
-        throw new Error(errorData.error || 'Error al eliminar el contrato')
-      }
+      // Cerrar modales
+      setShowDeleteModal(false)
+      setSelectedVenta(null)
+      
+      // Limpiar notificación después de 3 segundos
+      setTimeout(() => {
+        setNotification(null)
+      }, 3000)
+      
     } catch (error) {
       console.error('Error eliminando contrato:', error)
       setNotification({
@@ -2355,12 +2514,36 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
         url += `?${params.toString()}`
       }
       
-      const response = await fetch(url)
-      const data = await safeParseJSON(response)
-      
-      if (data.success && data.ventas) {
+      // Configurar timeout para evitar que se cuelgue
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 180000) // 3 minutos timeout
+
+      try {
+        const response = await fetch(url, {
+          signal: controller.signal,
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        })
+
+        clearTimeout(timeoutId)
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
+
+        let data;
+        try {
+          data = await safeParseJSON(response)
+        } catch (parseError) {
+          console.error('Error parsing JSON response:', parseError)
+          throw new Error('Error procesando respuesta del servidor')
+        }
+
+      if (data && data.success && data.ventas && Array.isArray(data.ventas)) {
         // Debug detallado de estados
-        const estadosUnicos = [...new Set(data.ventas.map((v: Venta) => v.estado_crm))]
+        const estadosUnicos = [...new Set(data.ventas.map((v: Venta) => v.estado_crm || 'Sin estado'))]
         console.log('🎯 API Response - Datos recibidos del CRM:', {
           total: data.ventas.length,
           success: data.success,
@@ -2368,57 +2551,100 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
           estadosUnicos: estadosUnicos,
           conteoPorEstado: estadosUnicos.map(estado => ({
             estado: estado || 'Sin estado',
-            cantidad: data.ventas.filter((v: Venta) => v.estado_crm === estado).length
+            cantidad: (data.ventas || []).filter((v: Venta) => v.estado_crm === estado).length
           })),
-          todosLosEstados: data.ventas.map((v: any) => ({
-            cliente: v.cliente_nombre,
+          todosLosEstados: (data.ventas || []).map((v: any) => ({
+            cliente: v.cliente_nombre || 'Sin nombre',
             estado: v.estado_crm || 'SIN ESTADO'
           }))
         })
         console.log('🔍 TODOS LOS DATOS:', data.ventas)
-        setVentas(data.ventas)
         
-        const totalVentas = data.ventas.length
+        // Filtrar las ventas que están marcadas como eliminadas
+        let ventasActivas;
+        let ventasEliminadasIds = [];
+        try {
+          ventasEliminadasIds = fichasEliminadasStorage.getVentasEliminadasIds()
+          ventasActivas = data.ventas.filter((v: Venta) => v && v.id && !ventasEliminadasIds.includes(v.id))
+        } catch (filterError) {
+          console.error('Error filtering ventas:', filterError)
+          ventasEliminadasIds = []
+          ventasActivas = data.ventas || []
+        }
+
+        console.log(`📊 Ventas totales: ${data.ventas.length}, Eliminadas: ${ventasEliminadasIds.length}, Activas: ${ventasActivas.length}`)
+        
+        setVentas(ventasActivas)
+        
+        const totalVentas = ventasActivas.length
         
         // Debug: Estados únicos recibidos del CRM
-        const estadosRecibidos = [...new Set(data.ventas.map((v: Venta) => v.estado_crm || 'SIN ESTADO'))]
-        console.log('🔍 Estados únicos recibidos en Dashboard:', estadosRecibidos)
+        let estadosRecibidos = []
+        try {
+          estadosRecibidos = [...new Set(data.ventas.map((v: Venta) => v && v.estado_crm ? v.estado_crm : 'SIN ESTADO'))]
+          console.log('🔍 Estados únicos recibidos en Dashboard:', estadosRecibidos)
+        } catch (estadosError) {
+          console.error('Error processing estados:', estadosError)
+          estadosRecibidos = ['SIN ESTADO']
+        }
         
         // Calcular contratos listos (completados, validados, etc.)
-        const contratosListos = data.ventas.filter((v: Venta) => {
-          if (!v.estado_crm) return false
-          const estadoLower = v.estado_crm.toLowerCase().trim()
-          const esListo = estadoLower.includes('listo') || 
-                 estadoLower.includes('completado') ||
-                 estadoLower.includes('finalizado') ||
-                 estadoLower.includes('validado') ||
-                 estadoLower.includes('aprobado') ||
-                 estadoLower.includes('entregado')
-          
-          // Debug de categorización
-          if (esListo) {
-            console.log(`✅ LISTO: "${v.estado_crm}" (${v.cliente_nombre})`)
-          }
-          
-          return esListo
-        }).length
+        let contratosListos = 0
+        try {
+          contratosListos = data.ventas.filter((v: Venta) => {
+            if (!v || !v.estado_crm) return false
+            try {
+              const estadoLower = v.estado_crm.toLowerCase().trim()
+              const esListo = estadoLower.includes('listo') ||
+                     estadoLower.includes('completado') ||
+                     estadoLower.includes('finalizado') ||
+                     estadoLower.includes('validado') ||
+                     estadoLower.includes('aprobado') ||
+                     estadoLower.includes('entregado')
+
+              // Debug de categorización
+              if (esListo) {
+                console.log(`✅ LISTO: "${v.estado_crm}" (${v.cliente_nombre || 'Sin nombre'})`)
+              }
+
+              return esListo
+            } catch (itemError) {
+              console.error('Error processing individual venta:', itemError)
+              return false
+            }
+          }).length
+        } catch (contratosError) {
+          console.error('Error calculating contratos listos:', contratosError)
+          contratosListos = 0
+        }
         
         // Calcular ventas rechazadas
-        const ventasRechazadas = data.ventas.filter((v: Venta) => {
-          if (!v.estado_crm) return false
-          const estadoLower = v.estado_crm.toLowerCase().trim()
-          const esRechazado = estadoLower.includes('rechazad') || // rechazado, rechazada
-                 estadoLower.includes('cancelad') || // cancelado, cancelada
-                 estadoLower.includes('anulad') ||   // anulado, anulada
-                 estadoLower.includes('descartad')   // descartado, descartada
-          
-          // Debug de categorización
-          if (esRechazado) {
-            console.log(`❌ RECHAZADO: "${v.estado_crm}" (${v.cliente_nombre})`)
-          }
-          
-          return esRechazado
-        }).length
+        let ventasRechazadas = 0
+        try {
+          ventasRechazadas = data.ventas.filter((v: Venta) => {
+            if (!v || !v.estado_crm) return false
+            try {
+              const estadoLower = v.estado_crm.toLowerCase().trim()
+              const esRechazado = estadoLower.includes('rechazad') || // rechazado, rechazada
+                     estadoLower.includes('cancelad') || // cancelado, cancelada
+                     estadoLower.includes('anulad') ||   // anulado, anulada
+                     estadoLower.includes('descartad')   // descartado, descartada
+
+              // Debug de categorización
+              if (esRechazado) {
+                console.log(`❌ RECHAZADO: "${v.estado_crm}" (${v.cliente_nombre || 'Sin nombre'})`)
+              }
+
+              return esRechazado
+            } catch (itemError) {
+              console.error('Error processing individual venta for rechazadas:', itemError)
+              return false
+            }
+          }).length
+        } catch (rechazadasError) {
+          console.error('Error calculating ventas rechazadas:', rechazadasError)
+          ventasRechazadas = 0
+        }
         
         // Calcular pendientes (todo lo que no está listo ni rechazado)
         const ventasPendientes = totalVentas - contratosListos - ventasRechazadas
@@ -2468,10 +2694,22 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
             ) : 'PENDIENTE'
           }))
         });
-        const montoTotal = data.ventas.reduce((sum: number, v: Venta) => {
-          const valor = typeof v.valor_total === 'number' ? v.valor_total : (typeof v.valor_total === 'string' ? parseFloat(v.valor_total) : 0)
-          return sum + (isNaN(valor) ? 0 : valor)
-        }, 0)
+        let montoTotal = 0
+        try {
+          montoTotal = data.ventas.reduce((sum: number, v: Venta) => {
+            if (!v) return sum
+            try {
+              const valor = typeof v.valor_total === 'number' ? v.valor_total : (typeof v.valor_total === 'string' ? parseFloat(v.valor_total) : 0)
+              return sum + (isNaN(valor) ? 0 : valor)
+            } catch (itemError) {
+              console.error('Error processing valor_total for venta:', itemError)
+              return sum
+            }
+          }, 0)
+        } catch (montoError) {
+          console.error('Error calculating monto total:', montoError)
+          montoTotal = 0
+        }
         
         const today = new Date().toISOString().split('T')[0]
         const ventasDelDia = data.ventas.filter((v: Venta) => 
@@ -2521,14 +2759,38 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
         setStats(newStats)
         
         // Actualizar clientes automáticamente con datos del CRM
-        const clientesFromCRM = convertVentasToClientes(data.ventas)
-        setClientes(clientesFromCRM)
+        try {
+          const clientesFromCRM = convertVentasToClientes(data.ventas || [])
+          setClientes(clientesFromCRM)
+        } catch (clientesError) {
+          console.error('Error converting ventas to clientes:', clientesError)
+          // No lanzar error, continuar con funcionalidad principal
+        }
       } else {
         setError(data.error || 'Error al cargar ventas')
       }
+
+      } catch (fetchError) {
+        clearTimeout(timeoutId)
+        throw fetchError
+      }
     } catch (err) {
-      setError('Error de conexión al servidor')
       console.error('Error fetching ventas:', err)
+      if (err instanceof Error) {
+        if (err.name === 'AbortError') {
+          setError('Timeout: La carga de datos está tardando demasiado. El servidor CRM puede estar lento. Intente nuevamente.')
+        } else if (err.message.includes('Failed to fetch')) {
+          setError('Error de conexión: No se pudo conectar al servidor. Verifique su conexión a internet.')
+        } else if (err.message.includes('HTTP error')) {
+          setError(`Error del servidor: ${err.message}`)
+        } else if (err.message.includes('NetworkError')) {
+          setError('Error de red: Problema de conectividad. Verifique su conexión.')
+        } else {
+          setError(`Error: ${err.message}`)
+        }
+      } else {
+        setError('Error desconocido al cargar ventas')
+      }
     } finally {
       setLoading(false)
       setFiltering(false)
@@ -2544,7 +2806,27 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
       setDataLoaded(true) // Marcar como cargado
     }
   }, [dataLoaded]) // Solo se ejecuta si no están cargados
-  
+
+  // Funcionalidad click-outside para cerrar sidebar
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (sidebarCollapsed) return // No hacer nada si ya está colapsado
+
+      if (sidebarRef.current && !sidebarRef.current.contains(event.target as Node)) {
+        setSidebarCollapsed(true)
+      }
+    }
+
+    // Agregar listener solo si el sidebar está expandido
+    if (!sidebarCollapsed) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [sidebarCollapsed])
+
   // Actualizar clientes automáticamente cuando las ventas estén disponibles
   useEffect(() => {
     if (ventas && ventas.length > 0) {
@@ -2555,6 +2837,19 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
       setClientesError(null)
     }
   }, [ventas]) // Se ejecuta cuando ventas cambia
+
+  // Debug: Detectar cuando el usuario navega a la sección Equipo
+  useEffect(() => {
+    if (activeSection === 'equipo') {
+      console.log(`🎯 ===== DETECTADO: NAVEGANDO A SECCIÓN EQUIPO =====`);
+      console.log(`📊 Ventas disponibles: ${ventas.length}`);
+      console.log(`📅 Fecha equipo: ${fechaInicioEquipo} - ${fechaFinEquipo}`);
+      if (ventas.length > 0) {
+        const vendedores = [...new Set(ventas.map(v => v.ejecutivo_nombre).filter(Boolean))];
+        console.log(`👥 Vendedores únicos encontrados: ${vendedores.length}`, vendedores);
+      }
+    }
+  }, [activeSection, ventas, fechaInicioEquipo, fechaFinEquipo])
 
   // Controlar scroll de la página cuando el modal está abierto
   useEffect(() => {
@@ -2572,6 +2867,159 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
     }
   }, [showDetallesModal])
 
+  // Función helper para calcular estadísticas de ejecutivos del CRM
+  const calcularEstadisticasEjecutivo = useCallback((nombreEjecutivo: string, fechaInicioEquipo: string, fechaFinEquipo: string) => {
+    console.log(`🔎 Calculando stats para: "${nombreEjecutivo}"`);
+    
+    // Usar las fechas seleccionadas
+    const fechaInicio = new Date(fechaInicioEquipo);
+    const fechaFin = new Date(fechaFinEquipo);
+    fechaFin.setHours(23, 59, 59, 999);
+    
+    const contratosEjecutivo = ventas.filter((venta: Venta) => {
+      // Normalizar nombres del CRM (quitar etiqueta (Vendedor) case-insensitive)
+      const vendedorCRM = (venta.ejecutivo_nombre || '')
+        .replace(/ \(Vendedor\)/gi, '')  // Quitar etiqueta case-insensitive
+        .replace(/\s+/g, ' ')           // Normalizar espacios
+        .trim()
+        .toLowerCase();
+      
+      // Normalizar nombre del ejecutivo (quitar etiqueta (vendedor) case-insensitive)
+      const nombreEjecutivoNormalizado = nombreEjecutivo
+        .replace(/ \(vendedor\)/gi, '')  // Quitar etiqueta case-insensitive
+        .replace(/\s+/g, ' ')           // Normalizar espacios
+        .trim()
+        .toLowerCase();
+      
+      const match = vendedorCRM === nombreEjecutivoNormalizado;
+      
+      // Debug simple
+      if (match && venta.ejecutivo_nombre && venta.ejecutivo_nombre.includes('ANA')) {
+        console.log(`  🎯 Match encontrado:`, {
+          original: venta.ejecutivo_nombre,
+          normalizado: vendedorCRM,
+          buscando: nombreEjecutivoNormalizado
+        });
+      }
+      
+      return match;
+    });
+    
+    const contratosDelPeriodo = contratosEjecutivo.filter((venta: Venta) => {
+      if (!venta.fecha_venta) return false;
+      const fechaVenta = new Date(venta.fecha_venta);
+      return fechaVenta >= fechaInicio && fechaVenta <= fechaFin;
+    });
+    
+    // Contar por estado
+    const conteoPorEstado: Record<string, number> = {
+      'Preingreso': 0,
+      'Validación': 0,
+      'Contrato': 0,
+      'Confirmación Entrega': 0,
+      'Producción': 0,
+      'Entrega OK': 0
+    };
+    
+    // Mapear estados del CRM a nuestras categorías
+    contratosDelPeriodo.forEach((venta: Venta) => {
+      const estadoCrm = venta.estado_crm || '';
+      const estadoLower = estadoCrm.toLowerCase().trim();
+      
+      let estadoMapeado = false;
+      
+      // 1. Entrega OK (más específico primero)
+      if (estadoLower.includes('entrega ok') || 
+          estadoLower.includes('entregado') || 
+          estadoLower.includes('delivered') ||
+          estadoLower.includes('finalizado') ||
+          estadoLower.includes('completado')) {
+        conteoPorEstado['Entrega OK']++;
+        estadoMapeado = true;
+      }
+      // 2. Producción
+      else if (estadoLower.includes('producci') || 
+               estadoLower.includes('production') ||
+               estadoLower.includes('fabricaci')) {
+        conteoPorEstado['Producción']++;
+        estadoMapeado = true;
+      }
+      // 3. Confirmación Entrega
+      else if ((estadoLower.includes('confirmaci') && estadoLower.includes('entrega')) ||
+               estadoLower.includes('confirmación entrega') ||
+               estadoLower.includes('delivery confirmation')) {
+        conteoPorEstado['Confirmación Entrega']++;
+        estadoMapeado = true;
+      }
+      // 4. Contrato
+      else if (estadoLower.includes('contrato') || 
+               estadoLower.includes('contract') ||
+               estadoLower.includes('firmado') ||
+               estadoLower.includes('signed')) {
+        conteoPorEstado['Contrato']++;
+        estadoMapeado = true;
+      }
+      // 5. Validación
+      else if (estadoLower.includes('validaci') || 
+               estadoLower.includes('validado') || 
+               estadoLower.includes('validation') ||
+               estadoLower.includes('aprobado') ||
+               estadoLower.includes('approved')) {
+        conteoPorEstado['Validación']++;
+        estadoMapeado = true;
+      }
+      // 6. Preingreso (menos específico al final)
+      else if (estadoLower.includes('preingreso') || 
+               estadoLower.includes('pre-ingreso') || 
+               estadoLower.includes('ingreso') ||
+               estadoLower.includes('inicial') ||
+               estadoLower.includes('nuevo') ||
+               estadoLower === '' || 
+               estadoLower === 'sin estado') {
+        conteoPorEstado['Preingreso']++;
+        estadoMapeado = true;
+      }
+      
+      // Si no se mapea a ningún estado conocido, contar como Preingreso por defecto
+      if (!estadoMapeado) {
+        conteoPorEstado['Preingreso']++;
+      }
+    });
+    
+    // Calcular total y cerrados
+    const totalContratos = contratosDelPeriodo.length;
+    const contratosCerrados = contratosDelPeriodo.filter((venta: Venta) => {
+      const estado = venta.estado_crm?.toLowerCase() || '';
+      return estado.includes('entrega ok') || 
+             estado.includes('completado') || 
+             estado.includes('finalizado') ||
+             estado.includes('entregado');
+    }).length;
+    
+    console.log(`📊 "${nombreEjecutivo}": ${totalContratos} contratos en período | ${contratosEjecutivo.length} totales`);
+    
+    return {
+      ...conteoPorEstado,
+      total: totalContratos,
+      cerrados: contratosCerrados
+    };
+  }, [ventas])
+
+  // Actualizar ejecutivos dinámicamente desde el CRM
+  React.useEffect(() => {
+    const { ejecutivosChileHome: chileHomeActualizado, ejecutivosConstrumatter: construmatterActualizado } = obtenerEjecutivosDesdeCRM(ventas);
+    
+    // Actualizar arrays de ejecutivos con datos del CRM
+    ejecutivosChileHome.length = 0;
+    ejecutivosChileHome.push(...chileHomeActualizado);
+    ejecutivosConstruMater.length = 0;
+    ejecutivosConstruMater.push(...construmatterActualizado);
+    
+    // Debug básico
+    console.log(`🎯 VENDEDORES EN CRM: ${[...new Set(ventas.map((v: any) => v.ejecutivo_nombre).filter(Boolean))].length}`);
+    console.log(`📊 Período: ${fechaInicioEquipo} - ${fechaFinEquipo}`);
+  }, [ventas, fechaInicioEquipo, fechaFinEquipo]);
+
   return (
     <>
       {loading && (
@@ -2582,9 +3030,16 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
       )}
       
       <div className="min-h-screen bg-gray-50">
-        <Sidebar activeSection={activeSection} setActiveSection={setActiveSection} />
+        <Sidebar
+          ref={sidebarRef}
+          activeSection={activeSection}
+          setActiveSection={setActiveSection}
+          user={user}
+          collapsed={sidebarCollapsed}
+          toggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
+        />
         
-        <div className="ml-64">
+        <div className={`${sidebarCollapsed ? 'ml-16' : 'ml-64'} transition-all duration-300`}>
           <main className="p-6">
           {activeSection === 'dashboard' && (
             <DashboardOverview 
@@ -2672,131 +3127,603 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
               )}
             </div>
           )}
+          {activeSection === 'planos' && (
+            <ListadoPlanos />
+          )}
           {activeSection === 'logistica' && (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12 text-center">
-              <Truck className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-              <h2 className="text-xl font-semibold text-gray-900 mb-2">Logística CRM</h2>
-              <p className="text-gray-600">Módulo de logística en desarrollo</p>
-              <p className="text-sm text-gray-500 mt-2">Próximamente: gestión de entregas, rutas y seguimiento</p>
-            </div>
+            <CRMDashboard />
           )}
           {activeSection === 'equipo' && (
             <div className="space-y-6">
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Equipo de Trabajo</h1>
-                <p className="text-gray-600">Gestión y supervisión del equipo de ventas</p>
+              {(() => {
+                console.log(`🎯 ====== USUARIO EN SECCIÓN EQUIPO ======`);
+                console.log(`📊 Datos CRM disponibles: ${ventas.length} ventas`);
+                return null;
+              })()}
+              {/* Header con título y calendario en la misma línea */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h1 className="text-2xl font-bold text-gray-900">Equipo de Trabajo</h1>
+                    <p className="text-gray-600">
+                      Gestión y supervisión del equipo - Contratos por período
+                    </p>
+                  </div>
+
+                  {/* Selector de fechas */}
+                  <div className="flex items-center gap-3 bg-gray-50 rounded-lg p-3 border border-gray-200">
+                    <div className="flex items-center gap-2 text-gray-700">
+                      <Calendar className="h-4 w-4" />
+                      <span className="text-sm font-medium">Período:</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <CustomDatePicker
+                        isRange={true}
+                        startDate={fechaInicioEquipo ? (() => {
+                          const parts = fechaInicioEquipo.split('-');
+                          if (parts.length === 3) {
+                            return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                          }
+                          return null;
+                        })() : null}
+                        endDate={fechaFinEquipo ? (() => {
+                          const parts = fechaFinEquipo.split('-');
+                          if (parts.length === 3) {
+                            return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                          }
+                          return null;
+                        })() : null}
+                        onRangeChange={(startDate, endDate) => {
+                          const startString = startDate ? (() => {
+                            const year = startDate.getFullYear();
+                            const month = (startDate.getMonth() + 1).toString().padStart(2, '0');
+                            const day = startDate.getDate().toString().padStart(2, '0');
+                            return `${year}-${month}-${day}`;
+                          })() : '';
+                          
+                          const endString = endDate ? (() => {
+                            const year = endDate.getFullYear();
+                            const month = (endDate.getMonth() + 1).toString().padStart(2, '0');
+                            const day = endDate.getDate().toString().padStart(2, '0');
+                            return `${year}-${month}-${day}`;
+                          })() : '';
+                          
+                          if (startString) setFechaInicioEquipo(startString);
+                          if (endString) setFechaFinEquipo(endString);
+                        }}
+                        minDate={new Date(fechaInicioProyecto)}
+                        maxDate={new Date()}
+                        placeholder="Seleccionar período"
+                        className="w-64"
+                      />
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="mt-4 text-sm text-gray-500">
+                  Período seleccionado: <span className="font-medium text-blue-600">{(() => {
+                    const fecha = new Date(fechaInicioEquipo + 'T00:00:00');
+                    return fecha.toLocaleDateString('es-ES', { 
+                      day: '2-digit', 
+                      month: '2-digit', 
+                      year: 'numeric' 
+                    });
+                  })()}</span> hasta <span className="font-medium text-blue-600">{(() => {
+                    const fecha = new Date(fechaFinEquipo + 'T00:00:00');
+                    return fecha.toLocaleDateString('es-ES', { 
+                      day: '2-digit', 
+                      month: '2-digit', 
+                      year: 'numeric' 
+                    });
+                  })()}</span>
+                </div>
+                
+                {/* Panel de resumen CRM */}
+                <div className="mt-3 text-xs bg-green-50 border border-green-200 rounded p-2">
+                  <span className="text-green-700 font-medium">✅ CRM Conectado:</span> 
+                  <span className="text-green-600"> {ventas.length} ventas cargadas | {[...new Set(ventas.map((v: any) => v.ejecutivo_nombre).filter(Boolean))].length} vendedores encontrados</span>
+                </div>
+                
+                {/* Dropdown personalizado de vendedores del CRM */}
+                <div className="mt-2 text-sm bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <strong className="text-blue-800">👥 Vendedores CRM ({[...new Set(ventas.map((v: any) => v.ejecutivo_nombre).filter(Boolean))].length})</strong>
+                    
+                    {/* Dropdown personalizado */}
+                    <div className="relative ml-4">
+                      <button
+                        className="px-4 py-2 bg-white border border-blue-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center gap-2 min-w-48"
+                        onClick={() => setDropdownAbierto(!dropdownAbierto)}
+                      >
+                        <span className="flex-1 text-left">
+                          {vendedorSeleccionado === 'todos' 
+                            ? '📊 Ver todos los vendedores' 
+                            : `👤 ${formatearNombreVendedor(vendedorSeleccionado)}`}
+                        </span>
+                        <ChevronDown className={`w-4 h-4 transition-transform ${dropdownAbierto ? 'rotate-180' : ''}`} />
+                      </button>
+                      
+                      {dropdownAbierto && (
+                        <div className="absolute top-full left-0 mt-1 bg-white border border-blue-300 rounded-md shadow-lg z-50 max-h-64 overflow-y-auto min-w-48">
+                          <div 
+                            className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm border-b border-gray-100"
+                            onClick={() => {
+                              setVendedorSeleccionado('todos');
+                              setDropdownAbierto(false);
+                              console.log('📊 Mostrando todos los vendedores');
+                            }}
+                          >
+                            📊 Ver todos los vendedores
+                          </div>
+                          {[...new Set(ventas.map((v: any) => v.ejecutivo_nombre).filter(Boolean))].map((vendedor, index) => (
+                            <div
+                              key={index}
+                              className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm"
+                              onClick={() => {
+                                setVendedorSeleccionado(vendedor);
+                                setDropdownAbierto(false);
+                                console.log(`👤 Vendedor seleccionado: ${formatearNombreVendedor(vendedor)}`);
+                              }}
+                            >
+                              👤 {formatearNombreVendedor(vendedor)}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Lista compacta de vendedores */}
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                    {[...new Set(ventas.map((v: any) => v.ejecutivo_nombre).filter(Boolean))]
+                      .map(vendedor => formatearNombreVendedor(vendedor))
+                      .map((vendedor, index) => (
+                        <div key={index} className="bg-white px-2 py-1 rounded border border-blue-200 text-xs">
+                          <span className="font-medium text-blue-600">{vendedor}</span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
               </div>
 
-              {/* ChileHome Team */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-3">
-                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                      <span className="text-blue-600 font-bold text-sm">🏠</span>
+
+
+              {/* Layout en dos columnas paralelas - Tablas profesionales */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                
+                {/* Tabla ChileHome */}
+                <div className="bg-white rounded-lg shadow-md border border-gray-300 overflow-hidden">
+                  {/* Header de la tabla */}
+                  <div className="bg-gray-800 text-white px-4 py-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-gray-700 rounded-lg flex items-center justify-center">
+                          <span className="text-white font-bold text-sm">CH</span>
+                        </div>
+                        <div>
+                          <h2 className="text-lg font-bold">ChileHome</h2>
+                          <p className="text-gray-300 text-xs">Empresa Matriz</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xl font-bold">{ejecutivosChileHome.length}</p>
+                        <p className="text-gray-300 text-xs">Ejecutivos</p>
+                      </div>
                     </div>
-                    ChileHome
-                  </h2>
-                  <span className="text-sm text-gray-500">{ejecutivosChileHome.length} ejecutivos</span>
+                  </div>
+                  
+                  {/* Tabla */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-gray-100 border-b border-gray-200">
+                          <th className="text-left px-2 py-2 font-semibold text-gray-700 text-xs">Ejecutivo</th>
+                          <th className="text-center px-1 py-2 font-semibold text-gray-700 text-xs" title="Preingreso">Pre</th>
+                          <th className="text-center px-1 py-2 font-semibold text-gray-700 text-xs" title="Validación">Val</th>
+                          <th className="text-center px-1 py-2 font-semibold text-gray-700 text-xs" title="Contrato">Con</th>
+                          <th className="text-center px-1 py-2 font-semibold text-gray-700 text-xs" title="Confirmación Entrega">Conf</th>
+                          <th className="text-center px-1 py-2 font-semibold text-gray-700 text-xs" title="Producción">Prod</th>
+                          <th className="text-center px-1 py-2 font-semibold text-gray-700 text-xs" title="Entrega OK">OK</th>
+                          <th className="text-center px-1 py-2 font-bold text-blue-700 text-xs bg-blue-50">Total</th>
+                          <th className="text-center px-1 py-2 font-bold text-green-700 text-xs bg-green-50" title="Cerrados">Cerr</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ejecutivosChileHome.map((ejecutivo, index) => {
+                          // DEBUG: Log del ejecutivo que se está procesando
+                          console.log(`🔍 ===== PROCESANDO EJECUTIVO CHILEHOME ${index + 1} =====`);
+                          console.log(`Índice: ${index}, Nombre para matching: "${ejecutivo.nombre}", Display: "${ejecutivo.nombreDisplay}"`);
+                          
+                          // Calcular estadísticas usando función helper
+                          const stats = calcularEstadisticasEjecutivo(ejecutivo.nombre, fechaInicioEquipo, fechaFinEquipo);
+                          
+                          return (
+                            <tr key={index} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                              <td className="px-2 py-2">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-7 h-7 bg-gray-600 rounded flex items-center justify-center">
+                                    <span className="text-white font-bold text-xs">{ejecutivo.iniciales}</span>
+                                  </div>
+                                  <div>
+                                    <p className="font-semibold text-gray-900 text-xs">{ejecutivo.nombreDisplay || ejecutivo.nombre}</p>
+                                    <p className="text-gray-500 text-xs">{ejecutivo.telefono}</p>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-1 py-2 text-center">
+                                <span className="text-xs text-gray-700">{stats['Preingreso'] || 0}</span>
+                              </td>
+                              <td className="px-1 py-2 text-center">
+                                <span className="text-xs text-gray-700">{stats['Validación'] || 0}</span>
+                              </td>
+                              <td className="px-1 py-2 text-center">
+                                <span className="text-xs text-gray-700">{stats['Contrato'] || 0}</span>
+                              </td>
+                              <td className="px-1 py-2 text-center">
+                                <span className="text-xs text-gray-700">{stats['Confirmación Entrega'] || 0}</span>
+                              </td>
+                              <td className="px-1 py-2 text-center">
+                                <span className="text-xs text-gray-700">{stats['Producción'] || 0}</span>
+                              </td>
+                              <td className="px-1 py-2 text-center">
+                                <span className="text-xs text-gray-700">{stats['Entrega OK'] || 0}</span>
+                              </td>
+                              <td className="px-1 py-2 text-center">
+                                <span className="text-xs font-bold text-blue-700">{stats.total || 0}</span>
+                              </td>
+                              <td className="px-1 py-2 text-center">
+                                <span className="text-xs font-bold text-green-700">{stats.cerrados || 0}</span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
 
-                <div className="space-y-3">
-                  {ejecutivosChileHome.map((ejecutivo, index) => {
-                    const ventasDelMes = Math.floor(Math.random() * 15) + 5; // Simulado por ahora
-                    const contratosValidados = Math.floor(Math.random() * 8) + 2;
-                    const montoTotal = (Math.floor(Math.random() * 25) + 10) * 100000; // Entre 1M - 3.5M
+                {/* Tabla Construmatter */}
+                <div className="bg-white rounded-lg shadow-md border border-gray-300 overflow-hidden">
+                  {/* Header de la tabla */}
+                  <div className="bg-gray-800 text-white px-4 py-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-gray-700 rounded-lg flex items-center justify-center">
+                          <span className="text-white font-bold text-sm">CM</span>
+                        </div>
+                        <div>
+                          <h2 className="text-lg font-bold">Construmatter</h2>
+                          <p className="text-gray-300 text-xs">Empresa Filial</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xl font-bold">{ejecutivosConstruMater.length}</p>
+                        <p className="text-gray-300 text-xs">Ejecutivos</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Tabla */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-gray-100 border-b border-gray-200">
+                          <th className="text-left px-2 py-2 font-semibold text-gray-700 text-xs">Ejecutivo</th>
+                          <th className="text-center px-1 py-2 font-semibold text-gray-700 text-xs" title="Preingreso">Pre</th>
+                          <th className="text-center px-1 py-2 font-semibold text-gray-700 text-xs" title="Validación">Val</th>
+                          <th className="text-center px-1 py-2 font-semibold text-gray-700 text-xs" title="Contrato">Con</th>
+                          <th className="text-center px-1 py-2 font-semibold text-gray-700 text-xs" title="Confirmación Entrega">Conf</th>
+                          <th className="text-center px-1 py-2 font-semibold text-gray-700 text-xs" title="Producción">Prod</th>
+                          <th className="text-center px-1 py-2 font-semibold text-gray-700 text-xs" title="Entrega OK">OK</th>
+                          <th className="text-center px-1 py-2 font-bold text-blue-700 text-xs bg-blue-50">Total</th>
+                          <th className="text-center px-1 py-2 font-bold text-green-700 text-xs bg-green-50" title="Cerrados">Cerr</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ejecutivosConstruMater.map((ejecutivo, index) => {
+                          const stats = calcularEstadisticasEjecutivo(ejecutivo.nombre, fechaInicioEquipo, fechaFinEquipo);
+                          
+                          return (
+                            <tr key={index} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                              <td className="px-2 py-2">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-7 h-7 bg-gray-600 rounded flex items-center justify-center">
+                                    <span className="text-white font-bold text-xs">{ejecutivo.iniciales}</span>
+                                  </div>
+                                  <div>
+                                    <p className="font-semibold text-gray-900 text-xs">{ejecutivo.nombreDisplay || ejecutivo.nombre}</p>
+                                    <p className="text-gray-500 text-xs">{ejecutivo.telefono}</p>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-1 py-2 text-center">
+                                <span className="text-xs text-gray-700">{stats['Preingreso'] || 0}</span>
+                              </td>
+                              <td className="px-1 py-2 text-center">
+                                <span className="text-xs text-gray-700">{stats['Validación'] || 0}</span>
+                              </td>
+                              <td className="px-1 py-2 text-center">
+                                <span className="text-xs text-gray-700">{stats['Contrato'] || 0}</span>
+                              </td>
+                              <td className="px-1 py-2 text-center">
+                                <span className="text-xs text-gray-700">{stats['Confirmación Entrega'] || 0}</span>
+                              </td>
+                              <td className="px-1 py-2 text-center">
+                                <span className="text-xs text-gray-700">{stats['Producción'] || 0}</span>
+                              </td>
+                              <td className="px-1 py-2 text-center">
+                                <span className="text-xs text-gray-700">{stats['Entrega OK'] || 0}</span>
+                              </td>
+                              <td className="px-1 py-2 text-center">
+                                <span className="text-xs font-bold text-blue-700">{stats.total || 0}</span>
+                              </td>
+                              <td className="px-1 py-2 text-center">
+                                <span className="text-xs font-bold text-green-700">{stats.cerrados || 0}</span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Tabla Construmatter */}
+                <div className="bg-white rounded-lg shadow-md border border-gray-300 overflow-hidden">
+                  {/* Header de la tabla */}
+                  <div className="bg-gray-800 text-white px-4 py-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-gray-700 rounded-lg flex items-center justify-center">
+                          <span className="text-white font-bold text-sm">CM</span>
+                        </div>
+                        <div>
+                          <h2 className="text-lg font-bold">Construmatter</h2>
+                          <p className="text-gray-300 text-xs">Empresa Filial</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xl font-bold">{ejecutivosConstruMater.length}</p>
+                        <p className="text-gray-300 text-xs">Ejecutivos</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Tabla */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-gray-100 border-b border-gray-200">
+                          <th className="text-left px-2 py-2 font-semibold text-gray-700 text-xs">Ejecutivo</th>
+                          <th className="text-center px-1 py-2 font-semibold text-gray-700 text-xs" title="Preingreso">Pre</th>
+                          <th className="text-center px-1 py-2 font-semibold text-gray-700 text-xs" title="Validación">Val</th>
+                          <th className="text-center px-1 py-2 font-semibold text-gray-700 text-xs" title="Contrato">Con</th>
+                          <th className="text-center px-1 py-2 font-semibold text-gray-700 text-xs" title="Confirmación Entrega">Conf</th>
+                          <th className="text-center px-1 py-2 font-semibold text-gray-700 text-xs" title="Producción">Prod</th>
+                          <th className="text-center px-1 py-2 font-semibold text-gray-700 text-xs" title="Entrega OK">OK</th>
+                          <th className="text-center px-1 py-2 font-bold text-blue-700 text-xs bg-blue-50">Total</th>
+                          <th className="text-center px-1 py-2 font-bold text-green-700 text-xs bg-green-50" title="Cerrados">Cerr</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ejecutivosConstruMater.map((ejecutivo, index) => {
+                          // Calcular estadísticas usando función helper
+                          const stats = calcularEstadisticasEjecutivo(ejecutivo.nombre, fechaInicioEquipo, fechaFinEquipo);
+                          
+                          return (
+                            <tr key={index} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                              <td className="px-2 py-2">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-7 h-7 bg-gray-600 rounded flex items-center justify-center">
+                                    <span className="text-white font-bold text-xs">{ejecutivo.iniciales}</span>
+                                  </div>
+                                  <div>
+                                    <p className="font-semibold text-gray-900 text-xs">{ejecutivo.nombreDisplay || ejecutivo.nombre}</p>
+                                    <p className="text-gray-500 text-xs">{ejecutivo.telefono}</p>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-1 py-2 text-center">
+                                <span className="text-xs text-gray-700">{stats['Preingreso'] || 0}</span>
+                              </td>
+                              <td className="px-1 py-2 text-center">
+                                <span className="text-xs text-gray-700">{stats['Validación'] || 0}</span>
+                              </td>
+                              <td className="px-1 py-2 text-center">
+                                <span className="text-xs text-gray-700">{stats['Contrato'] || 0}</span>
+                              </td>
+                              <td className="px-1 py-2 text-center">
+                                <span className="text-xs text-gray-700">{stats['Confirmación Entrega'] || 0}</span>
+                              </td>
+                              <td className="px-1 py-2 text-center">
+                                <span className="text-xs text-gray-700">{stats['Producción'] || 0}</span>
+                              </td>
+                              <td className="px-1 py-2 text-center">
+                                <span className="text-xs text-gray-700">{stats['Entrega OK'] || 0}</span>
+                              </td>
+                              <td className="px-1 py-2 text-center bg-blue-50">
+                                <span className="font-bold text-xs text-blue-700">{stats.total}</span>
+                              </td>
+                              <td className="px-1 py-2 text-center bg-green-50">
+                                <span className="font-bold text-xs text-green-700">{stats.cerrados}</span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Calendario de contratos por ejecutivo - Vista horizontal simplificada */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+                <div className="border-b border-gray-200 px-6 py-4">
+                  <h2 className="text-lg font-semibold text-gray-900">Calendario de Contratos por Ejecutivo</h2>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Actividad diaria de contratos por ejecutivo
+                  </p>
+                </div>
+                
+                {/* Calendario horizontal compacto */}
+                <div className="p-6">
+                  {(() => {
+                    // Generar días del período seleccionado (no mostrar días futuros)
+                    const fechaInicio = new Date(fechaInicioEquipo)
+                    const fechaFin = new Date(fechaFinEquipo)
+                    const hoy = new Date()
+                    hoy.setHours(23, 59, 59, 999) // Incluir todo el día de hoy
+                    
+                    // No mostrar días futuros
+                    const fechaFinReal = fechaFin > hoy ? hoy : fechaFin
+                    
+                    const diasDelPeriodo = []
+                    
+                    for (let d = new Date(fechaInicio); d <= fechaFinReal; d.setDate(d.getDate() + 1)) {
+                      diasDelPeriodo.push(new Date(d))
+                    }
+                    
+                    // Filtrar contratos por día y ejecutivo
+                    const contratosPorDia = diasDelPeriodo.map(dia => {
+                      const diaStr = dia.toISOString().split('T')[0]
+                      const contratosDelDia = ventas.filter((venta: Venta) => {
+                        if (!venta.fecha_venta) return false
+                        const fechaVenta = venta.fecha_venta.split('T')[0]
+                        return fechaVenta === diaStr
+                      })
+                      
+                      // Agrupar por ejecutivo con información clara
+                      const porEjecutivo: Record<string, { total: number, estados: Record<string, number> }> = {}
+                      
+                      contratosDelDia.forEach((venta: Venta) => {
+                        const ejecutivoNombre = venta.ejecutivo_nombre?.trim() || 'Sin asignar'
+                        let estadoSimplificado = 'Otros'
+                        
+                        const estadoCrm = venta.estado_crm?.toLowerCase() || ''
+                        
+                        // Debug logs temporarily disabled to prevent Event object errors
+                        
+                        // Mapear estados a categorías claras (más amplio para capturar variaciones)
+                        if (estadoCrm.includes('preingreso') || estadoCrm.includes('pre-ingreso') || estadoCrm.includes('ingreso')) {
+                          estadoSimplificado = 'Preingreso'
+                        } else if (estadoCrm.includes('validaci') || estadoCrm.includes('validado') || estadoCrm.includes('validation')) {
+                          estadoSimplificado = 'Validación'
+                        } else if (estadoCrm.includes('contrato') && !estadoCrm.includes('pre')) {
+                          estadoSimplificado = 'Contrato'
+                        } else if (estadoCrm.includes('confirmaci') || estadoCrm.includes('confirmación')) {
+                          estadoSimplificado = 'Confirmación'
+                        } else if (estadoCrm.includes('producci') || estadoCrm.includes('fabricaci') || estadoCrm.includes('manufactura')) {
+                          estadoSimplificado = 'Producción'
+                        } else if (estadoCrm.includes('entrega ok') || estadoCrm.includes('completado') || estadoCrm.includes('finalizado') || estadoCrm.includes('entregado')) {
+                          estadoSimplificado = 'Entregado'
+                        } else if (estadoCrm) {
+                          // Si tiene un estado pero no coincide con ninguno, usar el estado original
+                          estadoSimplificado = venta.estado_crm
+                        }
+                        
+                        if (!porEjecutivo[ejecutivoNombre]) {
+                          porEjecutivo[ejecutivoNombre] = { total: 0, estados: {} }
+                        }
+                        
+                        porEjecutivo[ejecutivoNombre].total++
+                        
+                        if (!porEjecutivo[ejecutivoNombre].estados[estadoSimplificado]) {
+                          porEjecutivo[ejecutivoNombre].estados[estadoSimplificado] = 0
+                        }
+                        porEjecutivo[ejecutivoNombre].estados[estadoSimplificado]++
+                      })
+                      
+                      return {
+                        dia,
+                        diaNumero: dia.getDate(),
+                        diaNombre: dia.toLocaleDateString('es-ES', { weekday: 'short' }),
+                        esHoy: dia.toDateString() === new Date().toDateString(),
+                        totalContratos: contratosDelDia.length,
+                        ejecutivos: porEjecutivo
+                      }
+                    })
+                    
+                    // Debug: Resumen de datos del CRM
+                    const totalContratosEnPeriodo = ventas.filter((venta: Venta) => {
+                      if (!venta.fecha_venta) return false
+                      const fechaVenta = new Date(venta.fecha_venta)
+                      const fechaInicio = new Date(fechaInicioEquipo)
+                      const fechaFinReal = fechaFin > hoy ? hoy : fechaFin
+                      return fechaVenta >= fechaInicio && fechaVenta <= fechaFinReal
+                    })
+                    
+                    // Variables de debug para el panel
+                    const vendedoresEnCRM = [...new Set(ventas.map((v: Venta) => v.ejecutivo_nombre).filter(Boolean))]
+                    
+                    // Debug logs temporarily disabled to prevent Event object errors
                     
                     return (
-                      <div key={index} className="bg-gray-50 rounded-lg p-4 hover:bg-gray-100 transition-colors">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-blue-500 rounded-lg flex items-center justify-center">
-                              <span className="text-white font-bold text-sm">{ejecutivo.iniciales}</span>
-                            </div>
-                            <div>
-                              <p className="font-medium text-gray-900 text-lg">{ejecutivo.nombre}</p>
-                              <div className="flex items-center gap-2 text-sm text-gray-600 mt-1">
-                                <Phone className="h-4 w-4" />
-                                {ejecutivo.telefono}
+                      <div className="space-y-4">
+                        {/* Panel de Debug removido - confirmamos que el CRM funciona correctamente */}
+                        
+                        {/* Vista horizontal de días */}
+                        <div className="overflow-x-auto">
+                          <div className="flex gap-1 min-w-max pb-4">
+                            {contratosPorDia.map((diaData, index) => (
+                              <div
+                                key={index}
+                                className={`flex-shrink-0 w-20 p-2 rounded-lg border text-center text-xs ${
+                                  diaData.esHoy 
+                                    ? 'bg-blue-100 border-blue-300' 
+                                    : diaData.totalContratos > 0 
+                                      ? 'bg-green-50 border-green-200 hover:bg-green-100' 
+                                      : 'bg-gray-50 border-gray-200'
+                                }`}
+                              >
+                                <div className={`font-semibold ${diaData.esHoy ? 'text-blue-700' : 'text-gray-700'}`}>
+                                  {diaData.diaNumero}
+                                </div>
+                                <div className="text-xs text-gray-500 mb-1">
+                                  {diaData.diaNombre}
+                                </div>
+                                {diaData.totalContratos > 0 ? (
+                                  <div className="space-y-1">
+                                    <div className="font-bold text-green-600">
+                                      {diaData.totalContratos} contratos
+                                    </div>
+                                    {Object.entries(diaData.ejecutivos).slice(0, 2).map(([ejecutivo, data]) => {
+                                      const nombreCorto = ejecutivo.split(' ')[0]
+                                      const estadoPrincipal = Object.entries(data.estados)
+                                        .sort(([,a], [,b]) => b - a)[0]
+                                      
+                                      return (
+                                        <div key={ejecutivo} className="text-xs bg-white rounded px-1 py-0.5">
+                                          <div className="font-medium text-gray-700">{nombreCorto}</div>
+                                          <div className="text-blue-600">{data.total} - {estadoPrincipal?.[0] || 'N/A'}</div>
+                                        </div>
+                                      )
+                                    })}
+                                    {Object.keys(diaData.ejecutivos).length > 2 && (
+                                      <div className="text-xs text-gray-500">
+                                        +{Object.keys(diaData.ejecutivos).length - 2} más
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="text-gray-400 text-xs">
+                                    Sin actividad
+                                  </div>
+                                )}
                               </div>
-                            </div>
-                          </div>
-                          
-                          <div className="flex items-center gap-8">
-                            <div className="text-center">
-                              <p className="text-2xl font-bold text-blue-600">{ventasDelMes}</p>
-                              <p className="text-xs text-gray-500">Ventas del mes</p>
-                            </div>
-                            <div className="text-center">
-                              <p className="text-2xl font-bold text-green-600">{contratosValidados}</p>
-                              <p className="text-xs text-gray-500">Contratos cerrados</p>
-                            </div>
-                            <div className="text-center">
-                              <p className="text-lg font-bold text-gray-900">{formatCurrency(montoTotal)}</p>
-                              <p className="text-xs text-gray-500">Monto total</p>
-                            </div>
+                            ))}
                           </div>
                         </div>
                       </div>
                     )
-                  })}
+                  })()}
                 </div>
               </div>
 
-              {/* ConstruMater Team */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-3">
-                    <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
-                      <span className="text-purple-600 font-bold text-sm">🏗️</span>
-                    </div>
-                    ConstruMater
-                  </h2>
-                  <span className="text-sm text-gray-500">{ejecutivosConstruMater.length} ejecutivos</span>
-                </div>
-
-                <div className="space-y-3">
-                  {ejecutivosConstruMater.map((ejecutivo, index) => {
-                    const ventasDelMes = Math.floor(Math.random() * 12) + 3; // Simulado por ahora
-                    const contratosValidados = Math.floor(Math.random() * 6) + 1;
-                    const montoTotal = (Math.floor(Math.random() * 20) + 8) * 100000; // Entre 800K - 2.8M
-                    
-                    return (
-                      <div key={index} className="bg-gray-50 rounded-lg p-4 hover:bg-gray-100 transition-colors">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-purple-500 rounded-lg flex items-center justify-center">
-                              <span className="text-white font-bold text-sm">{ejecutivo.iniciales}</span>
-                            </div>
-                            <div>
-                              <p className="font-medium text-gray-900 text-lg">{ejecutivo.nombre}</p>
-                              <div className="flex items-center gap-2 text-sm text-gray-600 mt-1">
-                                <Phone className="h-4 w-4" />
-                                {ejecutivo.telefono}
-                              </div>
-                            </div>
-                          </div>
-                          
-                          <div className="flex items-center gap-8">
-                            <div className="text-center">
-                              <p className="text-2xl font-bold text-blue-600">{ventasDelMes}</p>
-                              <p className="text-xs text-gray-500">Ventas del mes</p>
-                            </div>
-                            <div className="text-center">
-                              <p className="text-2xl font-bold text-green-600">{contratosValidados}</p>
-                              <p className="text-xs text-gray-500">Contratos cerrados</p>
-                            </div>
-                            <div className="text-center">
-                              <p className="text-lg font-bold text-gray-900">{formatCurrency(montoTotal)}</p>
-                              <p className="text-xs text-gray-500">Monto total</p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
             </div>
+          )}
+          {activeSection === 'mensajes' && (
+            <ConfiguracionMensajes />
           )}
           {activeSection === 'configuracion' && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12 text-center">

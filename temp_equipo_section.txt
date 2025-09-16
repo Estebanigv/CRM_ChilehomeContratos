@@ -1,0 +1,127 @@
+          {activeSection === 'equipo' && (
+            <div className="space-y-6">
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">Equipo de Trabajo</h1>
+                <p className="text-gray-600">Gestión y supervisión del equipo de ventas</p>
+              </div>
+
+              {/* Layout en dos columnas paralelas */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                
+                {/* Columna ChileHome */}
+                <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl shadow-lg border border-blue-200 p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center shadow-md">
+                        <span className="text-white font-bold text-lg">🏠</span>
+                      </div>
+                      <div>
+                        <h2 className="text-xl font-bold text-blue-900">ChileHome</h2>
+                        <p className="text-blue-700 text-sm font-medium">Empresa Matriz</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-2xl font-bold text-blue-800">{ejecutivosChileHome.length}</p>
+                      <p className="text-sm text-blue-600">Ejecutivos</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
+                    {ejecutivosChileHome.map((ejecutivo, index) => {
+                      const ventasDelMes = Math.floor(Math.random() * 15) + 5;
+                      const contratosValidados = Math.floor(Math.random() * 8) + 2;
+                      const montoTotal = (Math.floor(Math.random() * 25) + 10) * 100000;
+                      
+                      return (
+                        <div key={index} className="bg-white/80 backdrop-blur rounded-lg p-3 hover:bg-white hover:shadow-md transition-all duration-200 border border-blue-200/50">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
+                                <span className="text-white font-bold text-xs">{ejecutivo.iniciales}</span>
+                              </div>
+                              <div>
+                                <p className="font-semibold text-blue-900 text-sm">{ejecutivo.nombre}</p>
+                                <div className="flex items-center gap-1 text-xs text-blue-700">
+                                  <Phone className="h-3 w-3" />
+                                  {ejecutivo.telefono}
+                                </div>
+                              </div>
+                            </div>
+                            
+                            <div className="flex items-center gap-3 text-xs">
+                              <div className="text-center">
+                                <p className="text-sm font-bold text-blue-700">{ventasDelMes}</p>
+                                <p className="text-xs text-blue-600">Ventas</p>
+                              </div>
+                              <div className="text-center">
+                                <p className="text-sm font-bold text-emerald-600">{contratosValidados}</p>
+                                <p className="text-xs text-emerald-600">Cerrados</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Columna Construmatter */}
+                <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl shadow-lg border border-purple-200 p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-purple-600 rounded-xl flex items-center justify-center shadow-md">
+                        <span className="text-white font-bold text-lg">🏗</span>
+                      </div>
+                      <div>
+                        <h2 className="text-xl font-bold text-purple-900">Construmatter</h2>
+                        <p className="text-purple-700 text-sm font-medium">Empresa Filial</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-2xl font-bold text-purple-800">{ejecutivosConstruMater.length}</p>
+                      <p className="text-sm text-purple-600">Ejecutivos</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
+                    {ejecutivosConstruMater.map((ejecutivo, index) => {
+                      const ventasDelMes = Math.floor(Math.random() * 12) + 3;
+                      const contratosValidados = Math.floor(Math.random() * 6) + 1;
+                      const montoTotal = (Math.floor(Math.random() * 20) + 8) * 100000;
+                      
+                      return (
+                        <div key={index} className="bg-white/80 backdrop-blur rounded-lg p-3 hover:bg-white hover:shadow-md transition-all duration-200 border border-purple-200/50">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg flex items-center justify-center">
+                                <span className="text-white font-bold text-xs">{ejecutivo.iniciales}</span>
+                              </div>
+                              <div>
+                                <p className="font-semibold text-purple-900 text-sm">{ejecutivo.nombre}</p>
+                                <div className="flex items-center gap-1 text-xs text-purple-700">
+                                  <Phone className="h-3 w-3" />
+                                  {ejecutivo.telefono}
+                                </div>
+                              </div>
+                            </div>
+                            
+                            <div className="flex items-center gap-3 text-xs">
+                              <div className="text-center">
+                                <p className="text-sm font-bold text-purple-700">{ventasDelMes}</p>
+                                <p className="text-xs text-purple-600">Ventas</p>
+                              </div>
+                              <div className="text-center">
+                                <p className="text-sm font-bold text-emerald-600">{contratosValidados}</p>
+                                <p className="text-xs text-emerald-600">Cerrados</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          )}

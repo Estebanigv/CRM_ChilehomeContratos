@@ -2,9 +2,12 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { User, CRMVenta } from '@/types'
+import { User, CRMVenta, FormaPago, PlanoAdjunto } from '@/types'
 import CustomDatePicker from './CustomDatePicker'
+import FormasPagoMultiples from './FormasPagoMultiples'
+import GestorPlanos from './GestorPlanos'
 import { safeParseJSON } from '@/lib/utils'
+import { puedeEditarContrato, puedeValidarContrato } from '@/lib/permisos'
 import { 
   ArrowLeft, 
   Plus,
@@ -47,9 +50,10 @@ interface ContratoForm {
   
   // Datos del contrato (editables)
   numero_contrato: string
-  forma_pago: 'efectivo' | 'transferencia' | 'debito'
+  forma_pago: FormaPago[]
   fecha_entrega: string
   ejecutivo_nombre: string
+  planos: PlanoAdjunto[]
   
   // Materiales específicos (editable)
   materiales: Array<{
@@ -84,9 +88,10 @@ export default function CrearContratoClient({ user }: CrearContratoClientProps) 
     valor_total: 0,
     detalle_materiales: '',
     numero_contrato: '',
-    forma_pago: 'transferencia',
+    forma_pago: [],
     fecha_entrega: '',
     ejecutivo_nombre: '',
+    planos: [],
     materiales: [
       { item: 'Paneles Exteriores Forrados por Una Cara en media luna', cantidad: 10 },
       { item: 'Paneles Interiores sin Forro en Tabiquería', cantidad: 7 },
@@ -546,19 +551,13 @@ ChileHome - Casas Prefabricadas
                       required
                     />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Forma de Pago
-                    </label>
-                    <select
-                      value={contratoForm.forma_pago}
-                      onChange={(e) => updateField('forma_pago', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="transferencia">Transferencia</option>
-                      <option value="efectivo">Efectivo</option>
-                      <option value="debito">Débito</option>
-                    </select>
+                  <div className="md:col-span-2">
+                    <FormasPagoMultiples
+                      valorTotal={contratoForm.valor_total}
+                      formasPago={contratoForm.forma_pago}
+                      onChange={(formasPago) => updateField('forma_pago', formasPago)}
+                      disabled={false}
+                    />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -677,6 +676,16 @@ ChileHome - Casas Prefabricadas
                     />
                   </div>
                 </div>
+              </div>
+
+              {/* Planos Adjuntos */}
+              <div className="bg-white rounded-lg shadow-sm border p-6">
+                <GestorPlanos
+                  modeloCasa={contratoForm.modelo_casa}
+                  planos={contratoForm.planos}
+                  onChange={(planos) => updateField('planos', planos)}
+                  disabled={false}
+                />
               </div>
 
               {/* Observaciones */}

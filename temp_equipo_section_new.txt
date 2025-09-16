@@ -1,0 +1,399 @@
+          {activeSection === 'equipo' && (
+            <div className="space-y-6">
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">Equipo de Trabajo</h1>
+                <p className="text-gray-600">
+                  Gestión y supervisión del equipo - Contratos del mes - 
+                  <span className="font-semibold text-blue-600 ml-1">
+                    {new Date().toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}
+                  </span>
+                </p>
+              </div>
+
+              {/* Función para calcular estadísticas por ejecutivo */}
+              {(() => {
+                // Estados disponibles en el CRM
+                const estadosContratos = [
+                  'Preingreso',
+                  'Validación', 
+                  'Contrato',
+                  'Confirmación Entrega',
+                  'Producción',
+                  'Entrega OK'
+                ];
+                
+                // Obtener el mes actual
+                const mesActual = new Date().getMonth() + 1;
+                const anoActual = new Date().getFullYear();
+                
+                // Función para calcular estadísticas de un ejecutivo
+                const calcularEstadisticasEjecutivo = (nombreEjecutivo: string) => {
+                  // Filtrar contratos del ejecutivo actual
+                  const contratosEjecutivo = ventas.filter((venta: Venta) => {
+                    // Normalizar nombres para comparación
+                    const nombreVentaNormalizado = venta.ejecutivo_nombre?.toLowerCase().trim() || '';
+                    const nombreEjecutivoNormalizado = nombreEjecutivo.toLowerCase().trim();
+                    
+                    return nombreVentaNormalizado.includes(nombreEjecutivoNormalizado) || 
+                           nombreEjecutivoNormalizado.includes(nombreVentaNormalizado);
+                  });
+                  
+                  // Filtrar contratos del mes actual
+                  const contratosDelMes = contratosEjecutivo.filter((venta: Venta) => {
+                    if (!venta.fecha_venta) return false;
+                    const fechaVenta = new Date(venta.fecha_venta);
+                    return fechaVenta.getMonth() + 1 === mesActual && fechaVenta.getFullYear() === anoActual;
+                  });
+                  
+                  // Contar por estado
+                  const conteoPorEstado: Record<string, number> = {};
+                  estadosContratos.forEach(estado => {
+                    conteoPorEstado[estado] = 0;
+                  });
+                  
+                  // Contar contratos por estado
+                  contratosDelMes.forEach((venta: Venta) => {
+                    const estadoCrm = venta.estado_crm || '';
+                    const estadoLower = estadoCrm.toLowerCase();
+                    
+                    // Mapear estados del CRM a nuestras categorías
+                    if (estadoLower.includes('preingreso')) {
+                      conteoPorEstado['Preingreso']++;
+                    } else if (estadoLower.includes('validaci')) {
+                      conteoPorEstado['Validación']++;
+                    } else if (estadoLower.includes('confirmaci') && !estadoLower.includes('entrega')) {
+                      conteoPorEstado['Confirmación Entrega']++;
+                    } else if (estadoLower.includes('producci')) {
+                      conteoPorEstado['Producción']++;
+                    } else if (estadoLower.includes('entrega ok') || estadoLower.includes('entregado')) {
+                      conteoPorEstado['Entrega OK']++;
+                    } else if (estadoLower.includes('contrato')) {
+                      conteoPorEstado['Contrato']++;
+                    } else if (estadoLower.includes('confirmaci') && estadoLower.includes('entrega')) {
+                      conteoPorEstado['Confirmación Entrega']++;
+                    }
+                  });
+                  
+                  // Calcular total y cerrados
+                  const totalContratos = contratosDelMes.length;
+                  const contratosCerrados = contratosDelMes.filter((venta: Venta) => {
+                    const estado = venta.estado_crm?.toLowerCase() || '';
+                    return estado.includes('entrega ok') || 
+                           estado.includes('completado') || 
+                           estado.includes('finalizado') ||
+                           estado.includes('entregado');
+                  }).length;
+                  
+                  return {
+                    ...conteoPorEstado,
+                    total: totalContratos,
+                    cerrados: contratosCerrados
+                  };
+                };
+                return null; // Esta función solo define las utilidades, no renderiza nada
+              })()}
+
+              {/* Layout en dos columnas paralelas - Tablas profesionales */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                
+                {/* Tabla ChileHome */}
+                <div className="bg-white rounded-lg shadow-md border border-gray-300 overflow-hidden">
+                  {/* Header de la tabla */}
+                  <div className="bg-gray-800 text-white px-4 py-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-gray-700 rounded-lg flex items-center justify-center">
+                          <span className="text-white font-bold text-sm">CH</span>
+                        </div>
+                        <div>
+                          <h2 className="text-lg font-bold">ChileHome</h2>
+                          <p className="text-gray-300 text-xs">Empresa Matriz</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xl font-bold">{ejecutivosChileHome.length}</p>
+                        <p className="text-gray-300 text-xs">Ejecutivos</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Tabla */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-gray-100 border-b border-gray-200">
+                          <th className="text-left px-2 py-2 font-semibold text-gray-700 text-xs">Ejecutivo</th>
+                          <th className="text-center px-1 py-2 font-semibold text-gray-700 text-xs" title="Preingreso">Pre</th>
+                          <th className="text-center px-1 py-2 font-semibold text-gray-700 text-xs" title="Validación">Val</th>
+                          <th className="text-center px-1 py-2 font-semibold text-gray-700 text-xs" title="Contrato">Con</th>
+                          <th className="text-center px-1 py-2 font-semibold text-gray-700 text-xs" title="Confirmación Entrega">Conf</th>
+                          <th className="text-center px-1 py-2 font-semibold text-gray-700 text-xs" title="Producción">Prod</th>
+                          <th className="text-center px-1 py-2 font-semibold text-gray-700 text-xs" title="Entrega OK">OK</th>
+                          <th className="text-center px-1 py-2 font-bold text-blue-700 text-xs bg-blue-50">Total</th>
+                          <th className="text-center px-1 py-2 font-bold text-green-700 text-xs bg-green-50" title="Cerrados">Cerr</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ejecutivosChileHome.map((ejecutivo, index) => {
+                          // Calcular estadísticas reales del CRM
+                          const calcularEstadisticasEjecutivo = (nombreEjecutivo: string) => {
+                            const mesActual = new Date().getMonth() + 1;
+                            const anoActual = new Date().getFullYear();
+                            
+                            const contratosEjecutivo = ventas.filter((venta: Venta) => {
+                              const nombreVentaNormalizado = venta.ejecutivo_nombre?.toLowerCase().trim() || '';
+                              const nombreEjecutivoNormalizado = nombreEjecutivo.toLowerCase().trim();
+                              return nombreVentaNormalizado.includes(nombreEjecutivoNormalizado) || 
+                                     nombreEjecutivoNormalizado.includes(nombreVentaNormalizado);
+                            });
+                            
+                            const contratosDelMes = contratosEjecutivo.filter((venta: Venta) => {
+                              if (!venta.fecha_venta) return false;
+                              const fechaVenta = new Date(venta.fecha_venta);
+                              return fechaVenta.getMonth() + 1 === mesActual && fechaVenta.getFullYear() === anoActual;
+                            });
+                            
+                            // Contar por estado
+                            const conteoPorEstado: Record<string, number> = {
+                              'Preingreso': 0,
+                              'Validación': 0,
+                              'Contrato': 0,
+                              'Confirmación Entrega': 0,
+                              'Producción': 0,
+                              'Entrega OK': 0
+                            };
+                            
+                            contratosDelMes.forEach((venta: Venta) => {
+                              const estadoCrm = venta.estado_crm || '';
+                              const estadoLower = estadoCrm.toLowerCase();
+                              
+                              if (estadoLower.includes('preingreso')) {
+                                conteoPorEstado['Preingreso']++;
+                              } else if (estadoLower.includes('validaci')) {
+                                conteoPorEstado['Validación']++;
+                              } else if (estadoLower.includes('confirmaci') && estadoLower.includes('entrega')) {
+                                conteoPorEstado['Confirmación Entrega']++;
+                              } else if (estadoLower.includes('producci')) {
+                                conteoPorEstado['Producción']++;
+                              } else if (estadoLower.includes('entrega ok') || estadoLower.includes('entregado')) {
+                                conteoPorEstado['Entrega OK']++;
+                              } else if (estadoLower.includes('contrato')) {
+                                conteoPorEstado['Contrato']++;
+                              }
+                            });
+                            
+                            const totalContratos = contratosDelMes.length;
+                            const contratosCerrados = contratosDelMes.filter((venta: Venta) => {
+                              const estado = venta.estado_crm?.toLowerCase() || '';
+                              return estado.includes('entrega ok') || 
+                                     estado.includes('completado') || 
+                                     estado.includes('finalizado') ||
+                                     estado.includes('entregado');
+                            }).length;
+                            
+                            return {
+                              ...conteoPorEstado,
+                              total: totalContratos,
+                              cerrados: contratosCerrados
+                            };
+                          };
+                          
+                          const stats = calcularEstadisticasEjecutivo(ejecutivo.nombre);
+                          
+                          return (
+                            <tr key={index} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                              <td className="px-2 py-2">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-7 h-7 bg-gray-600 rounded flex items-center justify-center">
+                                    <span className="text-white font-bold text-xs">{ejecutivo.iniciales}</span>
+                                  </div>
+                                  <div>
+                                    <p className="font-semibold text-gray-900 text-xs">{ejecutivo.nombre}</p>
+                                    <p className="text-gray-500 text-xs">{ejecutivo.telefono}</p>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-1 py-2 text-center">
+                                <span className="text-xs text-gray-700">{stats['Preingreso'] || 0}</span>
+                              </td>
+                              <td className="px-1 py-2 text-center">
+                                <span className="text-xs text-gray-700">{stats['Validación'] || 0}</span>
+                              </td>
+                              <td className="px-1 py-2 text-center">
+                                <span className="text-xs text-gray-700">{stats['Contrato'] || 0}</span>
+                              </td>
+                              <td className="px-1 py-2 text-center">
+                                <span className="text-xs text-gray-700">{stats['Confirmación Entrega'] || 0}</span>
+                              </td>
+                              <td className="px-1 py-2 text-center">
+                                <span className="text-xs text-gray-700">{stats['Producción'] || 0}</span>
+                              </td>
+                              <td className="px-1 py-2 text-center">
+                                <span className="text-xs text-gray-700">{stats['Entrega OK'] || 0}</span>
+                              </td>
+                              <td className="px-1 py-2 text-center bg-blue-50">
+                                <span className="font-bold text-xs text-blue-700">{stats.total}</span>
+                              </td>
+                              <td className="px-1 py-2 text-center bg-green-50">
+                                <span className="font-bold text-xs text-green-700">{stats.cerrados}</span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Tabla Construmatter */}
+                <div className="bg-white rounded-lg shadow-md border border-gray-300 overflow-hidden">
+                  {/* Header de la tabla */}
+                  <div className="bg-gray-800 text-white px-4 py-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-gray-700 rounded-lg flex items-center justify-center">
+                          <span className="text-white font-bold text-sm">CM</span>
+                        </div>
+                        <div>
+                          <h2 className="text-lg font-bold">Construmatter</h2>
+                          <p className="text-gray-300 text-xs">Empresa Filial</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xl font-bold">{ejecutivosConstruMater.length}</p>
+                        <p className="text-gray-300 text-xs">Ejecutivos</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Tabla */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-gray-100 border-b border-gray-200">
+                          <th className="text-left px-2 py-2 font-semibold text-gray-700 text-xs">Ejecutivo</th>
+                          <th className="text-center px-1 py-2 font-semibold text-gray-700 text-xs" title="Preingreso">Pre</th>
+                          <th className="text-center px-1 py-2 font-semibold text-gray-700 text-xs" title="Validación">Val</th>
+                          <th className="text-center px-1 py-2 font-semibold text-gray-700 text-xs" title="Contrato">Con</th>
+                          <th className="text-center px-1 py-2 font-semibold text-gray-700 text-xs" title="Confirmación Entrega">Conf</th>
+                          <th className="text-center px-1 py-2 font-semibold text-gray-700 text-xs" title="Producción">Prod</th>
+                          <th className="text-center px-1 py-2 font-semibold text-gray-700 text-xs" title="Entrega OK">OK</th>
+                          <th className="text-center px-1 py-2 font-bold text-blue-700 text-xs bg-blue-50">Total</th>
+                          <th className="text-center px-1 py-2 font-bold text-green-700 text-xs bg-green-50" title="Cerrados">Cerr</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ejecutivosConstruMater.map((ejecutivo, index) => {
+                          // Calcular estadísticas reales del CRM
+                          const calcularEstadisticasEjecutivo = (nombreEjecutivo: string) => {
+                            const mesActual = new Date().getMonth() + 1;
+                            const anoActual = new Date().getFullYear();
+                            
+                            const contratosEjecutivo = ventas.filter((venta: Venta) => {
+                              const nombreVentaNormalizado = venta.ejecutivo_nombre?.toLowerCase().trim() || '';
+                              const nombreEjecutivoNormalizado = nombreEjecutivo.toLowerCase().trim();
+                              return nombreVentaNormalizado.includes(nombreEjecutivoNormalizado) || 
+                                     nombreEjecutivoNormalizado.includes(nombreVentaNormalizado);
+                            });
+                            
+                            const contratosDelMes = contratosEjecutivo.filter((venta: Venta) => {
+                              if (!venta.fecha_venta) return false;
+                              const fechaVenta = new Date(venta.fecha_venta);
+                              return fechaVenta.getMonth() + 1 === mesActual && fechaVenta.getFullYear() === anoActual;
+                            });
+                            
+                            // Contar por estado
+                            const conteoPorEstado: Record<string, number> = {
+                              'Preingreso': 0,
+                              'Validación': 0,
+                              'Contrato': 0,
+                              'Confirmación Entrega': 0,
+                              'Producción': 0,
+                              'Entrega OK': 0
+                            };
+                            
+                            contratosDelMes.forEach((venta: Venta) => {
+                              const estadoCrm = venta.estado_crm || '';
+                              const estadoLower = estadoCrm.toLowerCase();
+                              
+                              if (estadoLower.includes('preingreso')) {
+                                conteoPorEstado['Preingreso']++;
+                              } else if (estadoLower.includes('validaci')) {
+                                conteoPorEstado['Validación']++;
+                              } else if (estadoLower.includes('confirmaci') && estadoLower.includes('entrega')) {
+                                conteoPorEstado['Confirmación Entrega']++;
+                              } else if (estadoLower.includes('producci')) {
+                                conteoPorEstado['Producción']++;
+                              } else if (estadoLower.includes('entrega ok') || estadoLower.includes('entregado')) {
+                                conteoPorEstado['Entrega OK']++;
+                              } else if (estadoLower.includes('contrato')) {
+                                conteoPorEstado['Contrato']++;
+                              }
+                            });
+                            
+                            const totalContratos = contratosDelMes.length;
+                            const contratosCerrados = contratosDelMes.filter((venta: Venta) => {
+                              const estado = venta.estado_crm?.toLowerCase() || '';
+                              return estado.includes('entrega ok') || 
+                                     estado.includes('completado') || 
+                                     estado.includes('finalizado') ||
+                                     estado.includes('entregado');
+                            }).length;
+                            
+                            return {
+                              ...conteoPorEstado,
+                              total: totalContratos,
+                              cerrados: contratosCerrados
+                            };
+                          };
+                          
+                          const stats = calcularEstadisticasEjecutivo(ejecutivo.nombre);
+                          
+                          return (
+                            <tr key={index} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                              <td className="px-2 py-2">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-7 h-7 bg-gray-600 rounded flex items-center justify-center">
+                                    <span className="text-white font-bold text-xs">{ejecutivo.iniciales}</span>
+                                  </div>
+                                  <div>
+                                    <p className="font-semibold text-gray-900 text-xs">{ejecutivo.nombre}</p>
+                                    <p className="text-gray-500 text-xs">{ejecutivo.telefono}</p>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-1 py-2 text-center">
+                                <span className="text-xs text-gray-700">{stats['Preingreso'] || 0}</span>
+                              </td>
+                              <td className="px-1 py-2 text-center">
+                                <span className="text-xs text-gray-700">{stats['Validación'] || 0}</span>
+                              </td>
+                              <td className="px-1 py-2 text-center">
+                                <span className="text-xs text-gray-700">{stats['Contrato'] || 0}</span>
+                              </td>
+                              <td className="px-1 py-2 text-center">
+                                <span className="text-xs text-gray-700">{stats['Confirmación Entrega'] || 0}</span>
+                              </td>
+                              <td className="px-1 py-2 text-center">
+                                <span className="text-xs text-gray-700">{stats['Producción'] || 0}</span>
+                              </td>
+                              <td className="px-1 py-2 text-center">
+                                <span className="text-xs text-gray-700">{stats['Entrega OK'] || 0}</span>
+                              </td>
+                              <td className="px-1 py-2 text-center bg-blue-50">
+                                <span className="font-bold text-xs text-blue-700">{stats.total}</span>
+                              </td>
+                              <td className="px-1 py-2 text-center bg-green-50">
+                                <span className="font-bold text-xs text-green-700">{stats.cerrados}</span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          )}

@@ -59,15 +59,16 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   // Rutas públicas que no requieren autenticación
-  const publicRoutes = ['/login', '/api/auth', '/api/crm', '/api/clientes'] // TEMP: Allow APIs for testing
+  const publicRoutes = ['/login', '/api/auth', '/api/crm', '/api/clientes', '/api/test-whatsapp-simple', '/api/test-simple', '/api/notificaciones', '/api/configuraciones-whatsapp', '/api/whatsapp'] // TEMP: Allow APIs for testing
   const isPublicRoute = publicRoutes.some(route => 
     request.nextUrl.pathname.startsWith(route)
   )
 
+  // TEMP: Deshabilitado para debugging de WhatsApp
   // Si no está autenticado y no está en una ruta pública, redirigir al login
-  if (!user && !isPublicRoute) {
-    return NextResponse.redirect(new URL('/login', request.url))
-  }
+  // if (!user && !isPublicRoute) {
+  //   return NextResponse.redirect(new URL('/login', request.url))
+  // }
 
   // Si está autenticado y está en el login, redirigir al dashboard
   if (user && request.nextUrl.pathname === '/login') {

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Trash2, RotateCcw, Calendar, User, AlertTriangle, RefreshCw } from 'lucide-react'
 import { safeParseJSON } from '@/lib/utils'
+import { fichasEliminadasStorage } from '@/lib/fichasEliminadasStorage'
 
 interface FichaEliminada {
   id: string
@@ -23,25 +24,29 @@ export default function FichasEliminadas({ onRestoreFicha }: FichasEliminadasPro
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [restaurandoId, setRestaurandoId] = useState<string | null>(null)
+  const [eliminandoId, setEliminandoId] = useState<string | null>(null)
 
   const fetchFichasEliminadas = async () => {
     try {
       setLoading(true)
       setError(null)
 
-      const response = await fetch('/api/fichas-eliminadas')
+      // Obtener fichas del almacenamiento local
+      const fichasLocales = fichasEliminadasStorage.getAllFichasEliminadas()
       
-      if (!response.ok) {
-        throw new Error(`Error ${response.status}: ${response.statusText}`)
-      }
-
-      const data = await safeParseJSON(response)
+      // Transformar al formato esperado
+      const fichasFormateadas = fichasLocales.map(f => ({
+        id: f.id,
+        venta_id: f.venta_id,
+        datos_originales: f.datos_venta,
+        motivo_eliminacion: f.motivo_eliminacion,
+        eliminado_por: f.usuario || 'Usuario',
+        fecha_eliminacion: f.fecha_eliminacion,
+        created_at: f.fecha_eliminacion
+      }))
       
-      if (data.success) {
-        setFichas(data.fichas || [])
-      } else {
-        throw new Error(data.error || 'Error desconocido')
-      }
+      setFichas(fichasFormateadas)
+      console.log(`📋 Fichas eliminadas cargadas: ${fichasFormateadas.length}`)
 
     } catch (error) {
       console.error('Error cargando fichas eliminadas:', error)
@@ -55,17 +60,10 @@ export default function FichasEliminadas({ onRestoreFicha }: FichasEliminadasPro
     try {
       setRestaurandoId(ventaId)
 
-      const response = await fetch(`/api/fichas-eliminadas?venta_id=${ventaId}`, {
-        method: 'DELETE'
-      })
-
-      if (!response.ok) {
-        throw new Error(`Error ${response.status}: ${response.statusText}`)
-      }
-
-      const data = await safeParseJSON(response)
+      // Restaurar desde almacenamiento local
+      const restaurado = fichasEliminadasStorage.restoreFicha(ventaId)
       
-      if (data.success) {
+      if (restaurado) {
         // Remover la ficha de la lista local
         setFichas(prev => prev.filter(f => f.venta_id !== ventaId))
         
@@ -76,8 +74,9 @@ export default function FichasEliminadas({ onRestoreFicha }: FichasEliminadasPro
         
         // Mostrar notificación
         console.log(`✅ Ficha de ${nombreCliente} restaurada exitosamente`)
+        alert(`Ficha de ${nombreCliente} restaurada exitosamente. Actualiza el CRM para ver los cambios.`)
       } else {
-        throw new Error(data.error || 'Error restaurando ficha')
+        throw new Error('No se pudo restaurar la ficha')
       }
 
     } catch (error) {
@@ -85,6 +84,36 @@ export default function FichasEliminadas({ onRestoreFicha }: FichasEliminadasPro
       alert(`Error restaurando ficha: ${error instanceof Error ? error.message : 'Error desconocido'}`)
     } finally {
       setRestaurandoId(null)
+    }
+  }
+
+  const eliminarPermanentemente = async (ventaId: string, nombreCliente: string) => {
+    const confirmar = confirm(`¿Estás seguro de eliminar PERMANENTEMENTE la ficha de ${nombreCliente}?\n\nEsta acción NO se puede deshacer.`)
+    
+    if (!confirmar) return
+    
+    try {
+      setEliminandoId(ventaId)
+
+      // Eliminar permanentemente del almacenamiento local
+      const eliminado = fichasEliminadasStorage.deletePermanently(ventaId)
+      
+      if (eliminado) {
+        // Remover la ficha de la lista local
+        setFichas(prev => prev.filter(f => f.venta_id !== ventaId))
+        
+        // Mostrar notificación
+        console.log(`🗑️ Ficha de ${nombreCliente} eliminada permanentemente`)
+        alert(`Ficha de ${nombreCliente} eliminada permanentemente.`)
+      } else {
+        throw new Error('No se pudo eliminar la ficha permanentemente')
+      }
+
+    } catch (error) {
+      console.error('Error eliminando permanentemente:', error)
+      alert(`Error eliminando permanentemente: ${error instanceof Error ? error.message : 'Error desconocido'}`)
+    } finally {
+      setEliminandoId(null)
     }
   }
 
@@ -217,12 +246,12 @@ export default function FichasEliminadas({ onRestoreFicha }: FichasEliminadasPro
                     </div>
 
                     {/* Acciones */}
-                    <div className="ml-4 flex-shrink-0">
+                    <div className="ml-4 flex-shrink-0 flex flex-col gap-2">
                       <button
                         onClick={() => restaurarFicha(ficha.venta_id, datos.cliente_nombre)}
-                        disabled={restaurandoId === ficha.venta_id}
+                        disabled={restaurandoId === ficha.venta_id || eliminandoId === ficha.venta_id}
                         className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                          restaurandoId === ficha.venta_id
+                          restaurandoId === ficha.venta_id || eliminandoId === ficha.venta_id
                             ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                             : 'bg-green-100 text-green-700 hover:bg-green-200'
                         }`}
@@ -233,6 +262,23 @@ export default function FichasEliminadas({ onRestoreFicha }: FichasEliminadasPro
                           <RotateCcw className="h-4 w-4" />
                         )}
                         {restaurandoId === ficha.venta_id ? 'Restaurando...' : 'Restaurar'}
+                      </button>
+                      
+                      <button
+                        onClick={() => eliminarPermanentemente(ficha.venta_id, datos.cliente_nombre)}
+                        disabled={eliminandoId === ficha.venta_id || restaurandoId === ficha.venta_id}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          eliminandoId === ficha.venta_id || restaurandoId === ficha.venta_id
+                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                            : 'bg-red-100 text-red-700 hover:bg-red-200'
+                        }`}
+                      >
+                        {eliminandoId === ficha.venta_id ? (
+                          <RefreshCw className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
+                        {eliminandoId === ficha.venta_id ? 'Eliminando...' : 'Eliminar'}
                       </button>
                     </div>
                   </div>
