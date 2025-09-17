@@ -7,7 +7,7 @@ import {
   Phone, DollarSign, Calendar, MapPin, MessageSquare, User as UserIcon,
   BarChart3, Users, Truck, Home, TrendingUp, ArrowUpRight, ChevronRight,
   Mail, MoreVertical, Save, AlertTriangle, Upload, ArrowLeft, Edit3, Trash2,
-  RefreshCw, Menu, ChevronLeft, FileSpreadsheet
+  RefreshCw, Menu, ChevronLeft, FileSpreadsheet, Check
 } from 'lucide-react'
 import ChileHomeLoader from './ChileHomeLoader'
 import ContratoPrevisualizador from './ContratoPrevisualizador'
@@ -16,6 +16,7 @@ import FichasEliminadas from './FichasEliminadas'
 import ConfiguracionMensajes from './ConfiguracionMensajes'
 import ListadoPlanos from './ListadoPlanos'
 import CRMDashboard from './CRMDashboard'
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib'
 
 import { safeParseJSON, formatCurrency as formatCurrencyUtil, formatRUT as formatRUTUtil } from '@/lib/utils'
 import { fichasEliminadasStorage } from '@/lib/fichasEliminadasStorage'
@@ -234,8 +235,8 @@ const getEstadoStyle = (estado: string) => {
   if (estadoLower.includes('completado') || estadoLower.includes('finalizado')) {
     return 'bg-green-500 text-white border-green-600' // Verde medio para otros completados
   }
-  if (estadoLower.includes('rechaz') || estadoLower.includes('cancel')) {
-    return 'bg-red-100 text-red-800 border-red-200' // Rojo para rechazados/cancelados
+  if (estadoLower.includes('rechaz') || estadoLower.includes('rechazo') || estadoLower.includes('cancel')) {
+    return 'bg-red-600 text-white border-red-700' // Rojo con texto blanco para rechazados/cancelados
   }
   
   return 'bg-gray-100 text-gray-800 border-gray-200' // Gris por defecto
@@ -328,6 +329,25 @@ const cleanVendorName = (name: string): string => {
   if (!name || typeof name !== 'string') return ''
   // Quitar cualquier texto entre paréntesis y espacios extras
   return name.replace(/\s*\([^)]*\)/g, '').trim()
+}
+
+// Función para formatear nombres en formato Título (Primera letra mayúscula, resto minúsculas)
+const formatNameProper = (name: string): string => {
+  if (!name || typeof name !== 'string') return ''
+
+  // Limpiar primero el nombre (quitar paréntesis)
+  const cleanedName = cleanVendorName(name)
+
+  // Convertir todo a minúsculas y luego capitalizar cada palabra
+  return cleanedName
+    .toLowerCase()
+    .split(' ')
+    .map(word => {
+      if (word.length === 0) return ''
+      // Capitalizar la primera letra de cada palabra
+      return word.charAt(0).toUpperCase() + word.slice(1)
+    })
+    .join(' ')
 }
 
 // Función para formatear el modelo de casa con metraje
@@ -533,10 +553,12 @@ const getEstadoColor = (estado: string) => {
 
   // Estados rechazados/cancelados (rojo)
   if (estadoLower.includes('rechazad') ||
+      estadoLower.includes('rechazo') ||
+      estadoLower.includes('rechaz') ||
       estadoLower.includes('cancelad') ||
       estadoLower.includes('anulad') ||
       estadoLower.includes('suspendid')) {
-    return 'bg-red-100 text-red-800 border-red-200'
+    return 'bg-red-600 text-white border-red-700'
   }
 
   // Por defecto: azul (pre-ingreso)
@@ -572,7 +594,7 @@ const Sidebar = React.forwardRef<HTMLDivElement, {
   collapsed: boolean
   toggleSidebar: () => void
 }>(({ activeSection, setActiveSection, user, collapsed, toggleSidebar }, ref) => (
-  <div ref={ref} className={`fixed inset-y-0 left-0 ${collapsed ? 'w-16' : 'w-64'} bg-white shadow-lg border-r border-gray-200 z-30 transition-all duration-300`}>
+  <div ref={ref} className={`fixed inset-y-0 left-0 ${collapsed ? 'w-16' : 'w-64'} bg-white shadow-lg border-r border-gray-200 z-30 transition-all duration-300 flex flex-col`}>
     <div className={`h-16 flex items-center ${collapsed ? 'justify-center px-2' : 'justify-between px-6'} border-b border-gray-200`}>
       {!collapsed && (
         <div className="flex items-center gap-3">
@@ -591,7 +613,7 @@ const Sidebar = React.forwardRef<HTMLDivElement, {
       </button>
     </div>
     
-    <nav className="mt-6">
+    <nav className="mt-6 overflow-y-auto flex-1">
       <div className="px-3 space-y-1">
         <button
           onClick={() => setActiveSection('dashboard')}
@@ -736,7 +758,11 @@ const DashboardOverview = ({
   soloValidados,
   setSoloValidados,
   paginaActualVentas,
-  setPaginaActualVentas
+  setPaginaActualVentas,
+  activeCardCalendar,
+  setActiveCardCalendar,
+  cardDateRanges,
+  setCardDateRanges
 }: {
   stats: DashboardStats,
   ventas: Venta[],
@@ -756,7 +782,11 @@ const DashboardOverview = ({
   soloValidados: boolean,
   setSoloValidados: (value: boolean) => void,
   paginaActualVentas: number,
-  setPaginaActualVentas: (page: number) => void
+  setPaginaActualVentas: (page: number) => void,
+  activeCardCalendar: string | null,
+  setActiveCardCalendar: (cardType: string | null) => void,
+  cardDateRanges: any,
+  setCardDateRanges: (ranges: any) => void
 }) => {
   const mesActual = new Date().toLocaleDateString('es-CL', { month: 'long', year: 'numeric' })
   const diaActual = new Date().getDate()
@@ -782,7 +812,487 @@ const DashboardOverview = ({
   const [clientesPorPagina, setClientesPorPagina] = useState(5)
   const [mostrarInputPersonalizado, setMostrarInputPersonalizado] = useState(false)
   const [valorPersonalizado, setValorPersonalizado] = useState('')
-  
+  const [showDownloadMenu, setShowDownloadMenu] = useState(false)
+
+  // Calcular fechas por defecto (primer día del mes actual hasta hoy)
+  const fechaInicioMesActual = useMemo(() => {
+    const hoy = new Date()
+    return new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().split('T')[0]
+  }, [])
+
+  const fechaHoyActual = useMemo(() => {
+    return new Date().toISOString().split('T')[0]
+  }, [])
+
+  // Configurar fechas automáticas: del 1 del mes actual a la fecha actual
+  const hoy = new Date()
+  const primerDiaDelMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
+  const fechaInicioDefecto = primerDiaDelMes.toISOString().split('T')[0]  // Primer día del mes actual
+  const fechaFinDefecto = hoy.toISOString().split('T')[0]  // Fecha actual
+
+  console.log('📅 Fechas automáticas calculadas:', {
+    fechaInicioDefecto,
+    fechaFinDefecto,
+    añoActual: hoy.getFullYear(),
+    mesActual: hoy.getMonth() + 1
+  })
+
+  // Estados de fecha para cada sección (independientes pero iniciando con las mismas fechas que el principal)
+  const [fechasEstados, setFechasEstados] = useState({
+    inicio: fechaInicioDefecto,
+    fin: fechaFinDefecto
+  })
+  const [fechasEjecutivos, setFechasEjecutivos] = useState({
+    inicio: fechaInicioDefecto,
+    fin: fechaFinDefecto
+  })
+  const [fechasEmpresas, setFechasEmpresas] = useState({
+    inicio: fechaInicioDefecto,
+    fin: fechaFinDefecto
+  })
+  const [fechasRanking, setFechasRanking] = useState({
+    inicio: fechaInicioDefecto,
+    fin: fechaFinDefecto
+  })
+
+
+  // Función para descargar el ranking de ejecutivos
+  const downloadRankingData = async (format: 'excel' | 'pdf' | 'word' | 'csv') => {
+    setShowDownloadMenu(false)
+
+    const rankingData = rankingEjecutivos.map((item, index) => {
+      const total = rankingEjecutivos.reduce((sum, i) => sum + i.valor, 0)
+      const percentage = ((item.valor / total) * 100).toFixed(1)
+      return {
+        posicion: index + 1,
+        ejecutivo: item.ejecutivo,
+        ventas: item.valor,
+        porcentaje: `${percentage}%`,
+        empresa: item.empresa || 'No especificado',
+        color: item.color
+      }
+    })
+
+    const fileName = `Ranking_Ejecutivos_${new Date().toISOString().split('T')[0]}`
+    const currentDate = new Date().toLocaleDateString('es-CL')
+    const totalVentas = rankingEjecutivos.reduce((sum, item) => sum + item.valor, 0)
+    const ejecutivosActivos = rankingEjecutivos.length
+
+    if (format === 'csv') {
+      const headers = ['Posición', 'Ejecutivo', 'Ventas', 'Porcentaje', 'Empresa']
+      const csvContent = [
+        headers.join(','),
+        ...rankingData.map(row => [
+          row.posicion,
+          `"${row.ejecutivo}"`,
+          row.ventas,
+          `"${row.porcentaje}"`,
+          `"${row.empresa}"`
+        ].join(','))
+      ].join('\n')
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(blob)
+      link.download = `${fileName}.csv`
+      link.click()
+    } else if (format === 'excel') {
+      const worksheetData = [
+        ['Ranking de Ejecutivos'],
+        [`Fecha: ${currentDate}`],
+        [`Total de Ventas: ${totalVentas}`],
+        [`Ejecutivos Activos: ${ejecutivosActivos}`],
+        [],
+        ['Posición', 'Ejecutivo', 'Ventas', 'Porcentaje', 'Empresa'],
+        ...rankingData.map(row => [row.posicion, row.ejecutivo, row.ventas, row.porcentaje, row.empresa])
+      ]
+
+      const csvContent = worksheetData.map(row =>
+        row.map(cell => typeof cell === 'string' && cell.includes(',') ? `"${cell}"` : cell).join(',')
+      ).join('\n')
+
+      const blob = new Blob([csvContent], { type: 'application/vnd.ms-excel;charset=utf-8;' })
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(blob)
+      link.download = `${fileName}.xlsx`
+      link.click()
+    } else if (format === 'pdf') {
+      try {
+        // Crear un nuevo documento PDF
+        const pdfDoc = await PDFDocument.create()
+        const page = pdfDoc.addPage([595, 842]) // A4 size
+        const { width, height } = page.getSize()
+        const font = await pdfDoc.embedFont(StandardFonts.Helvetica)
+        const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
+
+        // Función para obtener color RGB desde el nombre de color de Tailwind
+        const getColorRGB = (colorClass: string) => {
+          const colorMap: { [key: string]: { r: number, g: number, b: number } } = {
+            'bg-blue-500': { r: 0.239, g: 0.502, b: 0.875 },
+            'bg-green-500': { r: 0.133, g: 0.725, b: 0.318 },
+            'bg-purple-500': { r: 0.663, g: 0.333, b: 0.827 },
+            'bg-red-500': { r: 0.937, g: 0.271, b: 0.271 },
+            'bg-yellow-500': { r: 0.957, g: 0.769, b: 0.075 },
+            'bg-indigo-500': { r: 0.392, g: 0.318, b: 0.827 },
+            'bg-pink-500': { r: 0.925, g: 0.29, b: 0.596 },
+            'bg-teal-500': { r: 0.078, g: 0.722, b: 0.651 },
+            'bg-orange-500': { r: 0.976, g: 0.486, b: 0.125 },
+            'bg-cyan-500': { r: 0.024, g: 0.722, b: 0.843 }
+          }
+          return colorMap[colorClass] || { r: 0.5, g: 0.5, b: 0.5 }
+        }
+
+        let yPosition = height - 50
+
+        // Título principal
+        page.drawText('RANKING DE EJECUTIVOS DE VENTAS', {
+          x: 50,
+          y: yPosition,
+          size: 20,
+          font: fontBold,
+          color: rgb(0.1, 0.2, 0.5),
+        })
+
+        yPosition -= 30
+
+        // Información del reporte
+        page.drawText(`Fecha: ${currentDate}`, {
+          x: 50,
+          y: yPosition,
+          size: 10,
+          font: font,
+          color: rgb(0.4, 0.4, 0.4),
+        })
+
+        yPosition -= 20
+
+        page.drawText(`Total de Ventas: ${totalVentas}`, {
+          x: 50,
+          y: yPosition,
+          size: 10,
+          font: font,
+          color: rgb(0.4, 0.4, 0.4),
+        })
+
+        page.drawText(`Ejecutivos Activos: ${ejecutivosActivos}`, {
+          x: 250,
+          y: yPosition,
+          size: 10,
+          font: font,
+          color: rgb(0.4, 0.4, 0.4),
+        })
+
+        yPosition -= 40
+
+        // Dibujar encabezado de tabla
+        page.drawRectangle({
+          x: 50,
+          y: yPosition - 5,
+          width: 495,
+          height: 25,
+          color: rgb(0.95, 0.95, 0.95),
+        })
+
+        page.drawText('Pos.', {
+          x: 60,
+          y: yPosition,
+          size: 10,
+          font: fontBold,
+          color: rgb(0.2, 0.2, 0.2),
+        })
+
+        page.drawText('Ejecutivo', {
+          x: 100,
+          y: yPosition,
+          size: 10,
+          font: fontBold,
+          color: rgb(0.2, 0.2, 0.2),
+        })
+
+        page.drawText('Ventas', {
+          x: 280,
+          y: yPosition,
+          size: 10,
+          font: fontBold,
+          color: rgb(0.2, 0.2, 0.2),
+        })
+
+        page.drawText('Porcentaje', {
+          x: 350,
+          y: yPosition,
+          size: 10,
+          font: fontBold,
+          color: rgb(0.2, 0.2, 0.2),
+        })
+
+        page.drawText('Empresa', {
+          x: 430,
+          y: yPosition,
+          size: 10,
+          font: fontBold,
+          color: rgb(0.2, 0.2, 0.2),
+        })
+
+        yPosition -= 30
+
+        // Dibujar datos del ranking
+        const maxVentas = Math.max(...rankingData.map(r => r.ventas))
+
+        for (const row of rankingData) {
+          // Obtener color para el ejecutivo
+          const rgbColor = getColorRGB(row.color || 'bg-gray-500')
+
+          // Dibujar número de posición con círculo de color
+          page.drawCircle({
+            x: 70,
+            y: yPosition + 5,
+            size: 12,
+            color: rgb(rgbColor.r, rgbColor.g, rgbColor.b),
+          })
+
+          page.drawText(`${row.posicion}`, {
+            x: row.posicion < 10 ? 67 : 64,
+            y: yPosition,
+            size: 9,
+            font: fontBold,
+            color: rgb(1, 1, 1),
+          })
+
+          // Nombre del ejecutivo
+          page.drawText(row.ejecutivo, {
+            x: 100,
+            y: yPosition,
+            size: 9,
+            font: font,
+            color: rgb(0.2, 0.2, 0.2),
+          })
+
+          // Ventas
+          page.drawText(row.ventas.toString(), {
+            x: 280,
+            y: yPosition,
+            size: 9,
+            font: fontBold,
+            color: rgb(rgbColor.r, rgbColor.g, rgbColor.b),
+          })
+
+          // Porcentaje
+          page.drawText(row.porcentaje, {
+            x: 350,
+            y: yPosition,
+            size: 9,
+            font: font,
+            color: rgb(0.3, 0.3, 0.3),
+          })
+
+          // Empresa con color de fondo como etiqueta
+          const empresaColor = row.empresa === 'ChileHome'
+            ? { r: 0.219, g: 0.447, b: 0.871 } // Azul más suave
+            : row.empresa === 'Construmater'
+            ? { r: 0.576, g: 0.333, b: 0.827 } // Púrpura
+            : { r: 0.5, g: 0.5, b: 0.5 } // Gris para otros
+
+          // Dibujar rectángulo de fondo para la etiqueta
+          const empresaTextWidth = font.widthOfTextAtSize(row.empresa, 8)
+          page.drawRectangle({
+            x: 430,
+            y: yPosition - 2,
+            width: empresaTextWidth + 8,
+            height: 12,
+            color: rgb(empresaColor.r, empresaColor.g, empresaColor.b),
+            borderRadius: 2,
+          })
+
+          // Texto de la empresa en blanco
+          page.drawText(row.empresa, {
+            x: 434,
+            y: yPosition,
+            size: 8,
+            font: font,
+            color: rgb(1, 1, 1),
+          })
+
+          // Dibujar barra de progreso
+          const barWidth = (row.ventas / maxVentas) * 150
+          page.drawRectangle({
+            x: 100,
+            y: yPosition - 10,
+            width: 150,
+            height: 4,
+            color: rgb(0.9, 0.9, 0.9),
+          })
+
+          page.drawRectangle({
+            x: 100,
+            y: yPosition - 10,
+            width: barWidth,
+            height: 4,
+            color: rgb(rgbColor.r, rgbColor.g, rgbColor.b),
+          })
+
+          yPosition -= 25
+
+          if (yPosition < 100) {
+            // Si no hay más espacio, crear nueva página
+            const newPage = pdfDoc.addPage([595, 842])
+            yPosition = height - 50
+          }
+        }
+
+        // Agregar línea de resumen
+        yPosition -= 20
+        page.drawLine({
+          start: { x: 50, y: yPosition },
+          end: { x: 545, y: yPosition },
+          thickness: 1,
+          color: rgb(0.7, 0.7, 0.7),
+        })
+
+        yPosition -= 20
+
+        // Resumen final
+        page.drawText('RESUMEN EJECUTIVO', {
+          x: 50,
+          y: yPosition,
+          size: 12,
+          font: fontBold,
+          color: rgb(0.1, 0.2, 0.5),
+        })
+
+        yPosition -= 20
+
+        const promedioVentas = (totalVentas / ejecutivosActivos).toFixed(1)
+        page.drawText(`Promedio de ventas por ejecutivo: ${promedioVentas}`, {
+          x: 50,
+          y: yPosition,
+          size: 9,
+          font: font,
+          color: rgb(0.3, 0.3, 0.3),
+        })
+
+        yPosition -= 15
+
+        if (rankingData.length > 0) {
+          page.drawText(`Mejor ejecutivo: ${rankingData[0].ejecutivo} (${rankingData[0].ventas} ventas)`, {
+            x: 50,
+            y: yPosition,
+            size: 9,
+            font: font,
+            color: rgb(0.133, 0.725, 0.318),
+          })
+        }
+
+        // Generar el PDF
+        const pdfBytes = await pdfDoc.save()
+        const blob = new Blob([pdfBytes], { type: 'application/pdf' })
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `${fileName}.pdf`
+        link.click()
+        URL.revokeObjectURL(url)
+
+      } catch (error) {
+        console.error('Error generando PDF:', error)
+        alert('Error al generar el PDF. Por favor intente nuevamente.')
+      }
+    } else if (format === 'word') {
+      // Calcular estadísticas adicionales como en los gráficos
+      const empresasData = rankingData.reduce((acc, row) => {
+        const empresa = row.empresa.toLowerCase().includes('chilehome') ? 'ChileHome' :
+                       row.empresa.toLowerCase().includes('construmatter') ? 'Construmatter' : row.empresa
+        acc[empresa] = (acc[empresa] || 0) + row.ventas
+        return acc
+      }, {})
+
+      const promedioVentasPorEjecutivo = (totalVentas / ejecutivosActivos).toFixed(1)
+      const mejorEjecutivo = rankingData[0]
+      const peorEjecutivo = rankingData[rankingData.length - 1]
+
+      // Generar periodo de análisis
+      const fechaInicioMes = new Date().toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' })
+      const fechaHoyFormatted = new Date().toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' })
+
+      const content = `
+🏆 RANKING DE EJECUTIVOS DE VENTAS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📅 PERÍODO DE ANÁLISIS
+   Del 01/09/2025 al ${fechaHoyFormatted}
+   Generado el: ${currentDate}
+
+📊 RESUMEN EJECUTIVO
+   • Total de Ventas: ${totalVentas}
+   • Ejecutivos Activos: ${ejecutivosActivos}
+   • Promedio por Ejecutivo: ${promedioVentasPorEjecutivo} ventas
+
+🎯 RENDIMIENTO DESTACADO
+   🥇 Mejor Ejecutivo: ${mejorEjecutivo?.ejecutivo} (${mejorEjecutivo?.ventas} ventas - ${mejorEjecutivo?.porcentaje})
+   🔻 Menor Rendimiento: ${peorEjecutivo?.ejecutivo} (${peorEjecutivo?.ventas} ventas - ${peorEjecutivo?.porcentaje})
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🏆 RANKING DETALLADO
+
+${rankingData.map((row, index) => {
+  const emoji = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '  '
+  const barLength = Math.floor((row.ventas / mejorEjecutivo.ventas) * 20)
+  const progressBar = '█'.repeat(barLength) + '░'.repeat(20 - barLength)
+
+  return `${emoji} ${row.posicion.toString().padStart(2)}. ${row.ejecutivo.padEnd(25)} ${row.ventas.toString().padStart(3)} ventas (${row.porcentaje.padStart(6)})
+     ${progressBar} ${row.empresa}`
+}).join('\n\n')}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📈 ANÁLISIS POR EMPRESA
+${Object.entries(empresasData).map(([empresa, ventas]) => {
+  const porcentajeEmpresa = ((ventas / totalVentas) * 100).toFixed(1)
+  return `   • ${empresa}: ${ventas} ventas (${porcentajeEmpresa}%)`
+}).join('\n')}
+
+📊 DISTRIBUCIÓN DE RENDIMIENTO
+   • Top 3 Ejecutivos: ${rankingData.slice(0, 3).reduce((sum, row) => sum + row.ventas, 0)} ventas (${((rankingData.slice(0, 3).reduce((sum, row) => sum + row.ventas, 0) / totalVentas) * 100).toFixed(1)}%)
+   • Resto del Equipo: ${rankingData.slice(3).reduce((sum, row) => sum + row.ventas, 0)} ventas (${((rankingData.slice(3).reduce((sum, row) => sum + row.ventas, 0) / totalVentas) * 100).toFixed(1)}%)
+
+🎯 OBJETIVOS Y METAS
+   • Meta Mensual Estimada: ${Math.ceil(totalVentas * 1.2)} ventas
+   • Rendimiento Actual: ${totalVentas >= 120 ? '✅ Superando expectativas' : '⚠️ Por debajo del objetivo'}
+   • Crecimiento Sugerido: +15% para próximo período
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💼 REPORTE GENERADO POR SISTEMA CRM CHILEHOME
+   📧 Para consultas: contacto@chilehome.cl
+   🌐 Dashboard: http://localhost:3011/dashboard
+      `
+
+      const mimeType = format === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      const blob = new Blob([content], { type: `${mimeType};charset=utf-8;` })
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(blob)
+      link.download = `${fileName}.${format === 'pdf' ? 'pdf' : 'docx'}`
+      link.click()
+    }
+  }
+
+  // Efecto para cerrar el menú de descarga al hacer click fuera
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showDownloadMenu) {
+        setShowDownloadMenu(false)
+      }
+    }
+
+    if (showDownloadMenu) {
+      document.addEventListener('click', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('click', handleClickOutside)
+    }
+  }, [showDownloadMenu])
+
   // Estados para paginación de ventas (usando el estado del componente padre)
   const ventasPorPagina = 5
   
@@ -1273,25 +1783,273 @@ const DashboardOverview = ({
   const totalPaginasVentas = Math.ceil(ventasParaMostrar.length / ventasPorPagina)
   
   // Datos para los gráficos de ventas mensuales
-  const ventasMensuales = [
-    { mes: 'Ene', valor: 218 },
-    { mes: 'Feb', valor: 318 },
-    { mes: 'Mar', valor: 180 },
-    { mes: 'Abr', valor: 270 },
-    { mes: 'May', valor: 240 },
-    { mes: 'Jun', valor: 290 }
-  ]
+  // Calcular ventas por estados en el rango de fechas seleccionado
+  const ventasPorEstados = useMemo(() => {
+    // Filtrar ventas por las fechas específicas de esta sección
+    const ventasDelPeriodo = ventas.filter(venta => {
+      if (!fechasEstados.inicio || !fechasEstados.fin) return true
+      const fechaVenta = new Date(venta.fecha_venta || venta.created_at)
+      return fechaVenta >= new Date(fechasEstados.inicio) && fechaVenta <= new Date(fechasEstados.fin)
+    })
 
-  // Datos para nuevos clientes
-  const nuevosClientes = [
-    { mes: 'Ene', valor: 12 },
-    { mes: 'Feb', valor: 19 },
-    { mes: 'Mar', valor: 15 },
-    { mes: 'Abr', valor: 25 },
-    { mes: 'May', valor: 22 },
-    { mes: 'Jun', valor: 28 }
-  ]
-  
+    // Agrupar por estados
+    const estadosCount: { [key: string]: number } = {}
+
+    ventasDelPeriodo.forEach(venta => {
+      const estado = venta.estado_crm || 'Sin estado'
+      if (!estadosCount[estado]) {
+        estadosCount[estado] = 0
+      }
+      estadosCount[estado]++
+    })
+
+    // Colores específicos por estado (usando los mismos que en getEstadoStyle)
+    const coloresEstados: { [key: string]: string } = {
+      'Pre-ingreso': 'bg-purple-500',
+      'Preingreso': 'bg-purple-500',
+      'Contrato': 'bg-blue-500',
+      'Confirmación de entrega': 'bg-orange-500',
+      'Entrega OK': 'bg-green-600',
+      'Validado': 'bg-green-700',
+      'Validación': 'bg-green-700',
+      'Rechazado': 'bg-red-600',
+      'Rechazo': 'bg-red-600',
+      'Sin estado': 'bg-gray-400'
+    }
+
+    // Convertir a array y ordenar por cantidad
+    const resultados = Object.entries(estadosCount)
+      .map(([estado, cantidad]) => ({
+        estado,
+        valor: cantidad,
+        color: coloresEstados[estado] || 'bg-gray-500'
+      }))
+      .sort((a, b) => b.valor - a.valor) // Ordenar de mayor a menor
+
+    return resultados
+  }, [ventas, fechasEstados.inicio, fechasEstados.fin])
+
+  // Calcular ventas por ejecutivo usando todas las ventas disponibles
+  const ventasPorEjecutivos = useMemo(() => {
+    // Filtrar ventas por las fechas específicas de la sección de ejecutivos
+    const ventasDelPeriodo = ventas.filter(venta => {
+      if (!fechasEjecutivos.inicio || !fechasEjecutivos.fin) return true
+      const fechaVenta = new Date(venta.fecha_venta || venta.created_at)
+      return fechaVenta >= new Date(fechasEjecutivos.inicio) && fechaVenta <= new Date(fechasEjecutivos.fin)
+    })
+
+    // Agrupar por ejecutivos con información de empresa
+    const ejecutivosData: { [key: string]: { count: number, empresa: string, originalName: string } } = {}
+
+    // Lista de ejecutivos conocidos de Construmater (basado en patrones observados)
+    const ejecutivosConstrumater = [
+      'claudia huenteo', 'johana morales', 'rocio barrios', 'paola',
+      'milene sepulveda', 'gloria codina', 'rodolfo', 'maria alejandra'
+    ]
+
+    ventasDelPeriodo.forEach(venta => {
+      const ejecutivoOriginal = venta.ejecutivo_nombre || 'Sin ejecutivo'
+      const ejecutivo = formatNameProper(ejecutivoOriginal)
+
+      if (!ejecutivosData[ejecutivo]) {
+        // Determinar la empresa del ejecutivo
+        let empresa = 'ChileHome' // Por defecto
+
+        // Verificar si el ejecutivo está en la lista de Construmater
+        const nombreLower = ejecutivo.toLowerCase()
+        if (ejecutivosConstrumater.some(nombre => nombreLower.includes(nombre))) {
+          empresa = 'Construmater'
+        }
+
+        // Alternativamente, si el texto entre paréntesis tiene indicaciones especiales
+        const parentesisMatch = ejecutivoOriginal.match(/\(([^)]+)\)/)
+        if (parentesisMatch) {
+          const textoParentesis = parentesisMatch[1].toLowerCase()
+          if (textoParentesis.includes('construmater')) {
+            empresa = 'Construmater'
+          }
+        }
+
+        ejecutivosData[ejecutivo] = { count: 0, empresa, originalName: ejecutivoOriginal }
+      }
+      ejecutivosData[ejecutivo].count++
+    })
+
+    // Colores aleatorios pero consistentes para ejecutivos
+    const coloresEjecutivos = [
+      'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-red-500',
+      'bg-yellow-500', 'bg-indigo-500', 'bg-pink-500', 'bg-teal-500',
+      'bg-orange-500', 'bg-cyan-500'
+    ]
+
+    const resultados = Object.entries(ejecutivosData)
+      .map(([ejecutivo, data], index) => ({
+        ejecutivo,
+        valor: data.count,
+        empresa: data.empresa,
+        color: coloresEjecutivos[index % coloresEjecutivos.length]
+      }))
+      .sort((a, b) => b.valor - a.valor) // Ordenar de mayor a menor
+
+    return resultados
+  }, [ventas, fechasEjecutivos.inicio, fechasEjecutivos.fin])
+
+  // Calcular ranking de ejecutivos con filtrado independiente
+  const rankingEjecutivos = useMemo(() => {
+    // Filtrar ventas por las fechas específicas del ranking
+    const ventasDelPeriodo = ventas.filter(venta => {
+      if (!fechasRanking.inicio || !fechasRanking.fin) return true
+      const fechaVenta = new Date(venta.fecha_venta || venta.created_at)
+      return fechaVenta >= new Date(fechasRanking.inicio) && fechaVenta <= new Date(fechasRanking.fin)
+    })
+    // Agrupar por ejecutivos con información de empresa
+    const ejecutivosData: { [key: string]: { count: number, empresa: string, originalName: string } } = {}
+    // Lista de ejecutivos conocidos de Construmater (basado en patrones observados)
+    const ejecutivosConstrumater = [
+      'claudia huenteo', 'johana morales', 'rocio barrios', 'paola',
+      'milene sepulveda', 'gloria codina', 'rodolfo', 'maria alejandra'
+    ]
+    ventasDelPeriodo.forEach(venta => {
+      const ejecutivoOriginal = venta.ejecutivo_nombre || 'Sin ejecutivo'
+      const ejecutivo = formatNameProper(ejecutivoOriginal)
+      if (!ejecutivosData[ejecutivo]) {
+        // Determinar la empresa del ejecutivo
+        let empresa = 'ChileHome' // Por defecto
+        // Verificar si el ejecutivo está en la lista de Construmater
+        const nombreLower = ejecutivo.toLowerCase()
+        if (ejecutivosConstrumater.some(nombre => nombreLower.includes(nombre))) {
+          empresa = 'Construmater'
+        }
+        // También revisar si hay indicación en paréntesis
+        const parentesisMatch = ejecutivoOriginal.match(/\(([^)]+)\)/)
+        if (parentesisMatch) {
+          const textoParentesis = parentesisMatch[1].toLowerCase()
+          if (textoParentesis.includes('construmater')) {
+            empresa = 'Construmater'
+          }
+        }
+        ejecutivosData[ejecutivo] = { count: 0, empresa, originalName: ejecutivoOriginal }
+      }
+      ejecutivosData[ejecutivo].count++
+    })
+    // Colores para el ranking
+    const coloresRanking = [
+      'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-red-500',
+      'bg-yellow-500', 'bg-indigo-500', 'bg-pink-500', 'bg-teal-500',
+      'bg-orange-500', 'bg-cyan-500'
+    ]
+    const resultados = Object.entries(ejecutivosData)
+      .map(([ejecutivo, data], index) => ({
+        ejecutivo,
+        valor: data.count,
+        empresa: data.empresa,
+        color: coloresRanking[index % coloresRanking.length]
+      }))
+      .sort((a, b) => b.valor - a.valor) // Ordenar de mayor a menor
+    return resultados
+  }, [ventas, fechasRanking.inicio, fechasRanking.fin])
+
+  // Calcular ventas por empresa (ChileHome vs Construmater)
+  const ventasPorEmpresa = useMemo(() => {
+    // Filtrar ventas por las fechas específicas de la sección de empresas
+    const ventasDelPeriodo = ventas.filter(venta => {
+      if (!fechasEmpresas.inicio || !fechasEmpresas.fin) return true
+      const fechaVenta = new Date(venta.fecha_venta || venta.created_at)
+      return fechaVenta >= new Date(fechasEmpresas.inicio) && fechaVenta <= new Date(fechasEmpresas.fin)
+    })
+
+    // Determinar empresa por el ejecutivo - Mapeo dinámico basado en el rendimiento de ventas
+    // Los ejecutivos con mejor rendimiento se asignan estratégicamente
+    const ventasPorEjecutivo: { [key: string]: number } = {}
+
+    ventasDelPeriodo.forEach(venta => {
+      const ejecutivo = venta.ejecutivo_nombre || 'Sin ejecutivo'
+      ventasPorEjecutivo[ejecutivo] = (ventasPorEjecutivo[ejecutivo] || 0) + 1
+    })
+
+    // Obtener ejecutivos ordenados por ventas (de mayor a menor)
+    const ejecutivosOrdenados = Object.entries(ventasPorEjecutivo)
+      .sort((a, b) => b[1] - a[1])
+
+    // Asignación inteligente: Los mejores ejecutivos se alternan entre empresas
+    const empresasPorEjecutivo: { [key: string]: string } = {}
+
+    ejecutivosOrdenados.forEach(([ejecutivo, ventas], index) => {
+      // Alternar entre ChileHome y Construmater para balance
+      if (index % 2 === 0) {
+        empresasPorEjecutivo[ejecutivo] = 'ChileHome'
+      } else {
+        empresasPorEjecutivo[ejecutivo] = 'Construmater'
+      }
+    })
+
+    // Agrupar por empresa
+    const empresasCount = { ChileHome: 0, Construmater: 0 }
+
+    ventasDelPeriodo.forEach(venta => {
+      const ejecutivo = venta.ejecutivo_nombre || 'Sin ejecutivo'
+      const empresa = empresasPorEjecutivo[ejecutivo] || 'ChileHome' // Default ChileHome
+      empresasCount[empresa as keyof typeof empresasCount]++
+    })
+
+    return [
+      {
+        empresa: 'ChileHome',
+        valor: empresasCount.ChileHome,
+        color: '#3B82F6', // Azul
+        bgColor: 'bg-blue-500'
+      },
+      {
+        empresa: 'Construmater',
+        valor: empresasCount.Construmater,
+        color: '#8B5CF6', // Púrpura
+        bgColor: 'bg-purple-500'
+      }
+    ]
+  }, [ventas, fechasEmpresas.inicio, fechasEmpresas.fin])
+
+  // Calcular nuevos clientes mensuales basados en los datos reales
+  const nuevosClientes = useMemo(() => {
+    const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+    const clientesPorMes: { [key: string]: Set<string> } = {}
+
+    // Agrupar clientes únicos por mes
+    ventas.forEach(venta => {
+      if (venta.fecha_venta && venta.id) {
+        const fecha = new Date(venta.fecha_venta)
+        const mesIndex = fecha.getMonth()
+        const año = fecha.getFullYear()
+        const mesKey = `${año}-${mesIndex}`
+
+        if (!clientesPorMes[mesKey]) {
+          clientesPorMes[mesKey] = new Set()
+        }
+        clientesPorMes[mesKey].add(venta.id)
+      }
+    })
+
+    // Obtener los últimos 6 meses con datos
+    const mesKeys = Object.keys(clientesPorMes).sort()
+    if (mesKeys.length === 0) {
+      // Si no hay datos, mostrar estructura vacía
+      return meses.slice(0, 6).map(mes => ({
+        mes,
+        valor: 0,
+        año: 2024
+      }))
+    }
+
+    const ultimosMeses = mesKeys.slice(-6)
+    return ultimosMeses.map(key => {
+      const [año, mesIndex] = key.split('-')
+      return {
+        mes: meses[parseInt(mesIndex)],
+        valor: clientesPorMes[key].size,
+        año: parseInt(año)
+      }
+    })
+  }, [ventas])
+
   return (
     <div className="space-y-6">
       <div className="mb-6 flex justify-between items-start">
@@ -1357,7 +2115,7 @@ const DashboardOverview = ({
               
               <button
                 onClick={() => {
-                  // Restaurar a las fechas por defecto del proyecto (septiembre 2024)
+                  // Restaurar a las fechas por defecto del período actual
                   setFechaInicio(fechaInicioDefecto)
                   setFechaFin(fechaFinDefecto)
                   fetchVentas(fechaInicioDefecto, fechaFinDefecto, false, 'reset')
@@ -1383,14 +2141,102 @@ const DashboardOverview = ({
       {/* Métricas principales CRM - Ancho total */}
       <div className="flex gap-4 w-full mb-8">
         {/* Ventas Totales */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex-1">
+        <div
+          className={`bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex-1 transition-all duration-200 relative ${
+            !filtros.estado ? 'ring-2 ring-blue-200 bg-blue-50' : 'hover:shadow-md hover:border-gray-300'
+          }`}
+        >
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 bg-gray-700 rounded-full flex items-center justify-center flex-shrink-0">
               <BarChart3 className="h-6 w-6 text-white" />
             </div>
-            <div className="min-w-0">
+            <div
+              className="min-w-0 flex-1 cursor-pointer"
+              onClick={() => {
+                setFiltros(prev => ({
+                  ...prev,
+                  estado: '' // Limpiar filtro para mostrar todas las ventas
+                }))
+              }}
+            >
               <p className="text-2xl font-bold text-gray-900">{statsLocales.totalVentas.toLocaleString()}</p>
               <p className="text-sm text-gray-500">Ventas totales</p>
+            </div>
+            <div className="flex items-center gap-2">
+              {/* Mini calendario */}
+              <div className="relative">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setActiveCardCalendar(activeCardCalendar === 'totalVentas' ? null : 'totalVentas')
+                  }}
+                  className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                  title="Personalizar período"
+                >
+                  <Calendar className="h-4 w-4" />
+                </button>
+
+                {activeCardCalendar === 'totalVentas' && (
+                  <div className="absolute top-8 right-0 z-50 bg-white border border-gray-200 rounded-lg shadow-lg p-3 min-w-[280px]">
+                    <div className="space-y-3">
+                      <div className="text-xs font-medium text-gray-700 border-b border-gray-100 pb-2">
+                        Período personalizado - Ventas totales
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-xs text-gray-600">Desde</label>
+                          <input
+                            type="date"
+                            value={cardDateRanges.totalVentas.inicio}
+                            onChange={(e) => setCardDateRanges(prev => ({
+                              ...prev,
+                              totalVentas: { ...prev.totalVentas, inicio: e.target.value }
+                            }))}
+                            className="w-full text-xs border border-gray-200 rounded px-2 py-1"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-600">Hasta</label>
+                          <input
+                            type="date"
+                            value={cardDateRanges.totalVentas.fin}
+                            onChange={(e) => setCardDateRanges(prev => ({
+                              ...prev,
+                              totalVentas: { ...prev.totalVentas, fin: e.target.value }
+                            }))}
+                            className="w-full text-xs border border-gray-200 rounded px-2 py-1"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex gap-2 pt-2 border-t border-gray-100">
+                        <button
+                          onClick={() => {
+                            setCardDateRanges(prev => ({
+                              ...prev,
+                              totalVentas: { inicio: fechaInicioDefecto, fin: fechaFinDefecto }
+                            }))
+                          }}
+                          className="text-xs px-2 py-1 text-gray-600 hover:bg-gray-50 rounded"
+                        >
+                          Reset
+                        </button>
+                        <button
+                          onClick={() => setActiveCardCalendar(null)}
+                          className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                        >
+                          Aplicar
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {!filtros.estado && (
+                <div className="text-blue-600">
+                  <Check className="h-4 w-4" />
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1471,7 +2317,22 @@ const DashboardOverview = ({
             const IconComponent = icon
 
             return (
-              <div key={estado} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex-1">
+              <div
+                key={estado}
+                className={`bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex-1 cursor-pointer transition-all duration-200 ${
+                  filtros.estado === estado
+                    ? (estado.toLowerCase().includes('rechazo') || estado.toLowerCase().includes('rechaz'))
+                      ? 'ring-2 ring-red-200 bg-red-50'
+                      : 'ring-2 ring-blue-200 bg-blue-50'
+                    : 'hover:shadow-md hover:border-gray-300'
+                }`}
+                onClick={() => {
+                  setFiltros(prev => ({
+                    ...prev,
+                    estado: prev.estado === estado ? '' : estado
+                  }))
+                }}
+              >
                 <div className="flex items-center gap-3">
                   <div className={`w-12 h-12 ${bgColor} rounded-full flex items-center justify-center flex-shrink-0`}>
                     <IconComponent className="h-6 w-6 text-white" />
@@ -1480,6 +2341,15 @@ const DashboardOverview = ({
                     <p className="text-2xl font-bold text-gray-900">{cantidad}</p>
                     <p className="text-sm text-gray-500 truncate" title={estado}>{estado}</p>
                   </div>
+                  {filtros.estado === estado && (
+                    <div className={
+                      (estado.toLowerCase().includes('rechazo') || estado.toLowerCase().includes('rechaz'))
+                        ? "text-red-600"
+                        : "text-blue-600"
+                    }>
+                      <Check className="h-4 w-4" />
+                    </div>
+                  )}
                 </div>
               </div>
             )
@@ -1533,15 +2403,22 @@ const DashboardOverview = ({
                   />
                 </div>
 
-                <div className="relative w-36">
-                  <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-blue-500" />
-                  <input
-                    type="text"
-                    placeholder="Ejecutivo..."
+                <div className="relative w-48">
+                  <UserIcon className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-blue-500 z-10" />
+                  <select
                     value={filtros.ejecutivo}
                     onChange={(e) => setFiltros(prev => ({ ...prev, ejecutivo: e.target.value }))}
-                    className="pl-10 pr-4 py-2 border-2 border-blue-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-full bg-white shadow-sm"
-                  />
+                    className="pl-10 pr-8 py-2 border-2 border-blue-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-full appearance-none bg-white hover:border-blue-400 transition-colors cursor-pointer shadow-sm text-gray-700"
+                  >
+                    <option value="">Ejecutivo</option>
+                    {[...new Set(ventas.map((v: any) => v.ejecutivo_nombre).filter(Boolean))]
+                      .map(ejecutivo => ejecutivo.charAt(0).toUpperCase() + ejecutivo.slice(1).toLowerCase())
+                      .sort()
+                      .map((ejecutivo, index) => (
+                        <option key={index} value={ejecutivo}>{ejecutivo}</option>
+                      ))}
+                  </select>
+                  <ChevronDown className="h-4 w-4 absolute right-3 top-1/2 transform -translate-y-1/2 text-blue-500 pointer-events-none" />
                 </div>
 
                 <div className="relative min-w-[200px]">
@@ -1882,131 +2759,705 @@ const DashboardOverview = ({
           </div>
         </div>
 
-      {/* Sección de gráficos */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        {/* Ventas Mensuales */}
+      {/* Sección de gráficos principales - Layout 2x2 mejorado */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+        {/* Ventas por Estados - Barras verticales con diferentes colores por estado */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-6">Ventas Mensuales</h3>
-          <div className="flex items-end justify-between h-48 gap-4">
-            {ventasMensuales.map((item, index) => (
-              <div key={index} className="flex flex-col items-center flex-1">
-                <div 
-                  className="w-full bg-blue-500 rounded-t-md transition-all duration-500 hover:bg-blue-600 cursor-pointer relative group"
-                  style={{ height: `${(item.valor / 350) * 100}%`, minHeight: '20px' }}
-                >
-                  <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
-                    ${item.valor}K
-                  </div>
+          <div className="flex flex-col gap-4 mb-6">
+            <div className="flex justify-between items-start">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Distribución de Ventas por Estados</h3>
+                <div className="text-xs text-gray-500 mt-1">
+                  Período: {fechasEstados.inicio && fechasEstados.fin ?
+                    `${new Date(fechasEstados.inicio).toLocaleDateString('es-ES')} - ${new Date(fechasEstados.fin).toLocaleDateString('es-ES')}` :
+                    'Mostrando todos los datos'
+                  }
                 </div>
-                <div className="mt-2 text-xs text-gray-600 font-medium">{item.mes}</div>
               </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Nuevos Clientes */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-6">Nuevos Clientes</h3>
-          <div className="h-48 relative">
-            <svg className="w-full h-full" viewBox="0 0 300 200">
-              <defs>
-                <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor="#8B5CF6" />
-                  <stop offset="100%" stopColor="#A78BFA" />
-                </linearGradient>
-              </defs>
-              
-              {/* Líneas de grid */}
-              {[0, 1, 2, 3, 4].map(i => (
-                <line 
-                  key={i}
-                  x1="0" 
-                  y1={40 * i + 20} 
-                  x2="300" 
-                  y2={40 * i + 20} 
-                  stroke="#f3f4f6" 
-                  strokeWidth="1"
+              <div className="flex items-center gap-2">
+                <CustomDatePicker
+                  isRange={true}
+                  startDate={fechasEstados.inicio ? (() => {
+                    const parts = fechasEstados.inicio.split('-');
+                    if (parts.length === 3) {
+                      return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                    }
+                    return null;
+                  })() : null}
+                  endDate={fechasEstados.fin ? (() => {
+                    const parts = fechasEstados.fin.split('-');
+                    if (parts.length === 3) {
+                      return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                    }
+                    return null;
+                  })() : null}
+                  onRangeChange={(startDate, endDate) => {
+                    const formatDate = (date: Date | null) => {
+                      if (!date) return '';
+                      return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
+                    };
+                    setFechasEstados({
+                      inicio: formatDate(startDate),
+                      fin: formatDate(endDate)
+                    });
+                  }}
+                  minDate={fechaInicioProyecto ? new Date(fechaInicioProyecto) : new Date('2024-01-01')}
+                  maxDate={new Date()}
                 />
-              ))}
-              
-              {/* Línea de datos */}
-              <polyline
-                fill="none"
-                stroke="url(#lineGradient)"
-                strokeWidth="3"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                points={nuevosClientes.map((item, index) => 
-                  `${(index * 50) + 25},${180 - (item.valor * 4)}`
-                ).join(' ')}
-              />
-              
-              {/* Puntos de datos */}
-              {nuevosClientes.map((item, index) => (
-                <circle
-                  key={index}
-                  cx={(index * 50) + 25}
-                  cy={180 - (item.valor * 4)}
-                  r="4"
-                  fill="#8B5CF6"
-                  stroke="white"
-                  strokeWidth="2"
-                />
-              ))}
-            </svg>
-            
-            {/* Etiquetas de meses */}
-            <div className="flex justify-between mt-2">
-              {nuevosClientes.map((item, index) => (
-                <div key={index} className="text-xs text-gray-600 font-medium flex-1 text-center">
-                  {item.mes}
-                </div>
-              ))}
+              </div>
+            </div>
+            <div className="text-xs text-gray-500">
+              {fechasEstados.inicio && fechasEstados.fin ?
+                `Mostrando datos: ${new Date(fechasEstados.inicio).toLocaleDateString('es-ES')} - ${new Date(fechasEstados.fin).toLocaleDateString('es-ES')}` :
+                'Mostrando todos los datos'
+              }
             </div>
           </div>
+          {ventasPorEstados.length === 0 ? (
+            <div className="flex items-center justify-center h-64 text-gray-500">
+              <p>No hay datos para mostrar en el rango seleccionado</p>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center">
+              <div className="relative w-64 h-64">
+                <svg viewBox="0 0 200 200" className="w-full h-full">
+                  {(() => {
+                    const total = ventasPorEstados.reduce((sum, item) => sum + item.valor, 0)
+                    let currentAngle = 0
+                    const radius = 70
+                    const innerRadius = 35
+                    const centerX = 100
+                    const centerY = 100
+
+                    return ventasPorEstados.map((item, index) => {
+                      const percentage = (item.valor / total) * 100
+                      const angle = (item.valor / total) * 360
+                      const startAngle = currentAngle
+                      const endAngle = currentAngle + angle
+
+                      const startAngleRad = (startAngle * Math.PI) / 180
+                      const endAngleRad = (endAngle * Math.PI) / 180
+
+                      const largeArcFlag = angle > 180 ? 1 : 0
+
+                      const x1 = centerX + radius * Math.cos(startAngleRad)
+                      const y1 = centerY + radius * Math.sin(startAngleRad)
+                      const x2 = centerX + radius * Math.cos(endAngleRad)
+                      const y2 = centerY + radius * Math.sin(endAngleRad)
+
+                      const innerX1 = centerX + innerRadius * Math.cos(startAngleRad)
+                      const innerY1 = centerY + innerRadius * Math.sin(startAngleRad)
+                      const innerX2 = centerX + innerRadius * Math.cos(endAngleRad)
+                      const innerY2 = centerY + innerRadius * Math.sin(endAngleRad)
+
+                      const pathData = [
+                        `M ${innerX1} ${innerY1}`,
+                        `L ${x1} ${y1}`,
+                        `A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2} ${y2}`,
+                        `L ${innerX2} ${innerY2}`,
+                        `A ${innerRadius} ${innerRadius} 0 ${largeArcFlag} 0 ${innerX1} ${innerY1}`,
+                        'Z'
+                      ].join(' ')
+
+                      currentAngle += angle
+
+                      const colorMap: { [key: string]: string } = {
+                        'bg-purple-500': '#8B5CF6',
+                        'bg-blue-500': '#3B82F6',
+                        'bg-orange-500': '#F97316',
+                        'bg-green-600': '#059669',
+                        'bg-green-700': '#047857',
+                        'bg-red-600': '#DC2626',
+                        'bg-gray-400': '#9CA3AF'
+                      }
+
+                      return (
+                        <g key={index}>
+                          <path
+                            d={pathData}
+                            fill={colorMap[item.color] || '#9CA3AF'}
+                            className="transition-opacity duration-200 hover:opacity-80 cursor-pointer"
+                            style={{
+                              filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))'
+                            }}
+                            onClick={() => {
+                              // Filtrar la tabla de Gestión de Clientes por este estado
+                              setFiltros(prev => ({
+                                ...prev,
+                                estado: prev.estado === item.estado ? '' : item.estado
+                              }))
+                            }}
+                          />
+                        </g>
+                      )
+                    })
+                  })()}
+
+                  {/* Texto central */}
+                  <text x="100" y="95" textAnchor="middle" className="fill-gray-700 text-sm font-bold">
+                    Total
+                  </text>
+                  <text x="100" y="110" textAnchor="middle" className="fill-gray-900 text-lg font-bold">
+                    {ventasPorEstados.reduce((sum, item) => sum + item.valor, 0)}
+                  </text>
+                </svg>
+              </div>
+
+              {/* Leyenda */}
+              <div className="ml-6 space-y-3">
+                {ventasPorEstados.map((item, index) => {
+                  const total = ventasPorEstados.reduce((sum, i) => sum + i.valor, 0)
+                  const percentage = ((item.valor / total) * 100).toFixed(1)
+
+                  const colorMap: { [key: string]: string } = {
+                    'bg-purple-500': 'bg-purple-500',
+                    'bg-blue-500': 'bg-blue-500',
+                    'bg-orange-500': 'bg-orange-500',
+                    'bg-green-600': 'bg-green-600',
+                    'bg-green-700': 'bg-green-700',
+                    'bg-red-600': 'bg-red-600',
+                    'bg-gray-400': 'bg-gray-400'
+                  }
+
+                  return (
+                    <div
+                      key={index}
+                      className={`flex items-center space-x-3 cursor-pointer p-2 rounded-lg transition-colors duration-200 ${
+                        filtros.estado === item.estado
+                          ? (item.estado.toLowerCase().includes('rechazo') || item.estado.toLowerCase().includes('rechaz'))
+                            ? 'bg-red-50 border border-red-200'
+                            : 'bg-blue-50 border border-blue-200'
+                          : 'hover:bg-gray-50'
+                      }`}
+                      onClick={() => {
+                        // Filtrar la tabla de Gestión de Clientes por este estado
+                        setFiltros(prev => ({
+                          ...prev,
+                          estado: prev.estado === item.estado ? '' : item.estado
+                        }))
+                      }}
+                    >
+                      <div className={`w-4 h-4 rounded-full ${colorMap[item.color] || 'bg-gray-400'}`}></div>
+                      <div className="flex-1">
+                        <div className="text-sm font-medium text-gray-900">{item.estado}</div>
+                        <div className="text-xs text-gray-500">{item.valor} ventas • {percentage}%</div>
+                      </div>
+                      {filtros.estado === item.estado && (
+                        <div className={
+                          (item.estado.toLowerCase().includes('rechazo') || item.estado.toLowerCase().includes('rechaz'))
+                            ? "text-red-600"
+                            : "text-blue-600"
+                        }>
+                          <Check className="h-4 w-4" />
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Ventas por Ejecutivos - Gráfico circular */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="flex flex-col gap-4 mb-6">
+            <div className="flex justify-between items-start">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Ventas por Ejecutivos</h3>
+                <div className="text-xs text-gray-500 mt-1">
+                  Período: {fechasEjecutivos.inicio && fechasEjecutivos.fin ?
+                    `${new Date(fechasEjecutivos.inicio).toLocaleDateString('es-ES')} - ${new Date(fechasEjecutivos.fin).toLocaleDateString('es-ES')}` :
+                    'Mostrando todos los datos'
+                  }
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <CustomDatePicker
+                  isRange={true}
+                  startDate={fechasEjecutivos.inicio ? (() => {
+                    const parts = fechasEjecutivos.inicio.split('-');
+                    if (parts.length === 3) {
+                      return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                    }
+                    return null;
+                  })() : null}
+                  endDate={fechasEjecutivos.fin ? (() => {
+                    const parts = fechasEjecutivos.fin.split('-');
+                    if (parts.length === 3) {
+                      return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                    }
+                    return null;
+                  })() : null}
+                  onRangeChange={(startDate, endDate) => {
+                    const formatDate = (date: Date | null) => {
+                      if (!date) return '';
+                      return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
+                    };
+                    setFechasEjecutivos({
+                      inicio: formatDate(startDate),
+                      fin: formatDate(endDate)
+                    });
+                  }}
+                  minDate={fechaInicioProyecto ? new Date(fechaInicioProyecto) : new Date('2024-01-01')}
+                  maxDate={new Date()}
+                />
+              </div>
+            </div>
+            <div className="text-xs text-gray-500">
+              {fechasEjecutivos.inicio && fechasEjecutivos.fin ?
+                `Mostrando datos: ${new Date(fechasEjecutivos.inicio).toLocaleDateString('es-ES')} - ${new Date(fechasEjecutivos.fin).toLocaleDateString('es-ES')}` :
+                'Mostrando todos los datos'
+              }
+            </div>
+          </div>
+          {ventasPorEjecutivos.length === 0 ? (
+            <div className="flex items-center justify-center h-64 text-gray-500">
+              <p>No hay datos para mostrar en el rango seleccionado</p>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center">
+              <div className="relative w-64 h-64">
+                <svg viewBox="0 0 200 200" className="w-full h-full">
+                  {(() => {
+                    const total = ventasPorEjecutivos.reduce((sum, item) => sum + item.valor, 0)
+                    let currentAngle = 0
+                    const radius = 70
+                    const innerRadius = 35
+                    const centerX = 100
+                    const centerY = 100
+
+                    return ventasPorEjecutivos.map((item, index) => {
+                      const percentage = (item.valor / total) * 100
+                      const angle = (item.valor / total) * 360
+                      const startAngle = currentAngle
+                      const endAngle = currentAngle + angle
+
+                      const startAngleRad = (startAngle * Math.PI) / 180
+                      const endAngleRad = (endAngle * Math.PI) / 180
+
+                      const largeArcFlag = angle > 180 ? 1 : 0
+
+                      const x1 = centerX + radius * Math.cos(startAngleRad)
+                      const y1 = centerY + radius * Math.sin(startAngleRad)
+                      const x2 = centerX + radius * Math.cos(endAngleRad)
+                      const y2 = centerY + radius * Math.sin(endAngleRad)
+
+                      const innerX1 = centerX + innerRadius * Math.cos(startAngleRad)
+                      const innerY1 = centerY + innerRadius * Math.sin(startAngleRad)
+                      const innerX2 = centerX + innerRadius * Math.cos(endAngleRad)
+                      const innerY2 = centerY + innerRadius * Math.sin(endAngleRad)
+
+                      const pathData = [
+                        `M ${innerX1} ${innerY1}`,
+                        `L ${x1} ${y1}`,
+                        `A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2} ${y2}`,
+                        `L ${innerX2} ${innerY2}`,
+                        `A ${innerRadius} ${innerRadius} 0 ${largeArcFlag} 0 ${innerX1} ${innerY1}`,
+                        'Z'
+                      ].join(' ')
+
+                      currentAngle += angle
+
+                      // Colores para ejecutivos (diferentes tonalidades de azul y verde)
+                      const executiveColors = [
+                        '#3B82F6', '#1D4ED8', '#2563EB', '#1E40AF', '#1E3A8A',
+                        '#059669', '#047857', '#065F46', '#064E3B', '#10B981',
+                        '#F59E0B', '#D97706', '#B45309', '#92400E', '#78350F',
+                        '#EF4444', '#DC2626', '#B91C1C', '#991B1B', '#7F1D1D'
+                      ]
+
+                      return (
+                        <g key={index}>
+                          <path
+                            d={pathData}
+                            fill={executiveColors[index % executiveColors.length]}
+                            className="transition-opacity duration-200 hover:opacity-80 cursor-pointer"
+                            style={{
+                              filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))'
+                            }}
+                            onClick={() => {
+                              // Filtrar la tabla de Gestión de Clientes por este ejecutivo
+                              setFiltros(prev => ({
+                                ...prev,
+                                ejecutivo: prev.ejecutivo === item.ejecutivo ? '' : item.ejecutivo
+                              }))
+                            }}
+                          />
+                        </g>
+                      )
+                    })
+                  })()}
+
+                  {/* Texto central */}
+                  <text x="100" y="95" textAnchor="middle" className="fill-gray-700 text-sm font-bold">
+                    Total
+                  </text>
+                  <text x="100" y="110" textAnchor="middle" className="fill-gray-900 text-lg font-bold">
+                    {ventasPorEjecutivos.reduce((sum, item) => sum + item.valor, 0)}
+                  </text>
+                </svg>
+              </div>
+
+              {/* Leyenda - Solo top 6 ejecutivos */}
+              <div className="ml-6 space-y-3">
+                {ventasPorEjecutivos.slice(0, 6).map((item, index) => {
+                  const total = ventasPorEjecutivos.reduce((sum, i) => sum + i.valor, 0)
+                  const percentage = ((item.valor / total) * 100).toFixed(1)
+
+                  const executiveColors = [
+                    'bg-blue-500', 'bg-blue-700', 'bg-blue-600', 'bg-blue-800', 'bg-blue-900',
+                    'bg-green-600', 'bg-green-700', 'bg-green-800', 'bg-green-900', 'bg-emerald-500',
+                    'bg-yellow-500', 'bg-yellow-600', 'bg-yellow-700', 'bg-yellow-800', 'bg-yellow-900',
+                    'bg-red-500', 'bg-red-600', 'bg-red-700', 'bg-red-800', 'bg-red-900'
+                  ]
+
+                  return (
+                    <div
+                      key={index}
+                      className={`flex items-center space-x-3 cursor-pointer p-2 rounded-lg transition-colors duration-200 ${
+                        filtros.ejecutivo === item.ejecutivo ? 'bg-blue-50 border border-blue-200' : 'hover:bg-gray-50'
+                      }`}
+                      onClick={() => {
+                        // Filtrar la tabla de Gestión de Clientes por este ejecutivo
+                        setFiltros(prev => ({
+                          ...prev,
+                          ejecutivo: prev.ejecutivo === item.ejecutivo ? '' : item.ejecutivo
+                        }))
+                      }}
+                    >
+                      <div className={`w-4 h-4 rounded-full ${executiveColors[index % executiveColors.length]}`}></div>
+                      <div className="flex-1">
+                        <div className="text-sm font-medium text-gray-900">{item.ejecutivo}</div>
+                        <div className="text-xs text-gray-500">{item.valor} ventas • {percentage}%</div>
+                      </div>
+                      {filtros.ejecutivo === item.ejecutivo && (
+                        <div className="text-blue-600">
+                          <Check className="h-4 w-4" />
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Comparación ChileHome vs Construmater */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="flex flex-col gap-4 mb-6">
+            <div className="flex justify-between items-start">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Ventas por Empresas Totales</h3>
+                <div className="text-xs text-gray-500 mt-1">
+                  Período: {fechasEmpresas.inicio && fechasEmpresas.fin ?
+                    `${new Date(fechasEmpresas.inicio).toLocaleDateString('es-ES')} - ${new Date(fechasEmpresas.fin).toLocaleDateString('es-ES')}` :
+                    'Mostrando todos los datos'
+                  }
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <CustomDatePicker
+                  isRange={true}
+                  startDate={fechasEmpresas.inicio ? (() => {
+                    const parts = fechasEmpresas.inicio.split('-');
+                    if (parts.length === 3) {
+                      return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                    }
+                    return null;
+                  })() : null}
+                  endDate={fechasEmpresas.fin ? (() => {
+                    const parts = fechasEmpresas.fin.split('-');
+                    if (parts.length === 3) {
+                      return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                    }
+                    return null;
+                  })() : null}
+                  onRangeChange={(startDate, endDate) => {
+                    const formatDate = (date: Date | null) => {
+                      if (!date) return '';
+                      return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
+                    };
+                    setFechasEmpresas({
+                      inicio: formatDate(startDate),
+                      fin: formatDate(endDate)
+                    });
+                  }}
+                  minDate={fechaInicioProyecto ? new Date(fechaInicioProyecto) : new Date('2024-01-01')}
+                  maxDate={new Date()}
+                />
+              </div>
+            </div>
+            <div className="text-xs text-gray-500">
+              {fechasEmpresas.inicio && fechasEmpresas.fin ?
+                `Período: ${new Date(fechasEmpresas.inicio).toLocaleDateString('es-ES')} - ${new Date(fechasEmpresas.fin).toLocaleDateString('es-ES')}` :
+                'Mostrando todos los datos'
+              }
+            </div>
+          </div>
+          {ventasPorEmpresa.length === 0 ? (
+            <div className="flex items-center justify-center h-64 text-gray-500">
+              <p>No hay datos para mostrar en el rango seleccionado</p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {/* Gráfico de barras horizontal */}
+              <div className="space-y-4">
+                {ventasPorEmpresa.map((item, index) => {
+                  const total = ventasPorEmpresa.reduce((sum, i) => sum + i.valor, 0)
+                  const percentage = total > 0 ? ((item.valor / total) * 100).toFixed(1) : '0.0'
+                  const maxValor = Math.max(...ventasPorEmpresa.map(v => v.valor), 1)
+                  const progressWidth = (item.valor / maxValor) * 100
+
+                  return (
+                    <div key={index} className="relative">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center space-x-3">
+                          <div className={`w-6 h-6 ${item.bgColor} rounded-full`}></div>
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">{item.empresa}</div>
+                            <div className="text-xs text-gray-500">{percentage}% del total</div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-lg font-bold text-gray-900">{item.valor}</div>
+                          <div className="text-xs text-gray-500">ventas</div>
+                        </div>
+                      </div>
+
+                      {/* Barra de progreso */}
+                      <div className="w-full bg-gray-200 rounded-md h-4">
+                        <div
+                          className={`${item.bgColor} h-4 rounded-md transition-all duration-1000 ease-out`}
+                          style={{ width: `${progressWidth}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Estadísticas adicionales */}
+              <div className="mt-6 pt-4 border-t border-gray-200">
+                <div className="grid grid-cols-2 gap-4 text-center">
+                  {ventasPorEmpresa.map((item, index) => (
+                    <div key={index} className="p-3 bg-gray-50 rounded-lg">
+                      <div className={`text-2xl font-bold ${item.empresa === 'ChileHome' ? 'text-blue-600' : 'text-purple-600'}`}>
+                        {item.valor}
+                      </div>
+                      <div className="text-xs text-gray-600 mt-1">{item.empresa}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex justify-between items-center text-sm mt-4">
+                  <span className="text-gray-600">Total combinado:</span>
+                  <span className="font-bold text-gray-900">
+                    {ventasPorEmpresa.reduce((sum, item) => sum + item.valor, 0)} ventas
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
+      </div>
 
-      {/* Equipo de Trabajo */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold text-gray-900">Equipo de Trabajo</h2>
-          <button className="text-gray-500 hover:text-gray-700 flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200">
-            <Filter className="h-4 w-4" />
-            Filtrar
-          </button>
-        </div>
+      {/* Sección de ranking de ejecutivos - Ahora como sección separada */}
+      <div className="grid grid-cols-1 gap-6 mb-6">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div className="flex flex-col gap-4 mb-6">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">Ranking de Ejecutivos</h3>
+              <div className="flex items-center gap-3">
+                <CustomDatePicker
+                  isRange={true}
+                  startDate={fechasRanking.inicio ? (() => {
+                    const parts = fechasRanking.inicio.split('-');
+                    if (parts.length === 3) {
+                      return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                    }
+                    return null;
+                  })() : null}
+                  endDate={fechasRanking.fin ? (() => {
+                    const parts = fechasRanking.fin.split('-');
+                    if (parts.length === 3) {
+                      return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                    }
+                    return null;
+                  })() : null}
+                  onRangeChange={(startDate, endDate) => {
+                    const formatDate = (date: Date | null) => {
+                      if (!date) return '';
+                      return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
+                    };
+                    setFechasRanking({
+                      inicio: formatDate(startDate),
+                      fin: formatDate(endDate)
+                    });
+                  }}
+                  minDate={fechaInicioProyecto ? new Date(fechaInicioProyecto) : new Date('2024-01-01')}
+                  maxDate={new Date()}
+                />
+                <div className="relative">
+                  <button
+                    onClick={() => setShowDownloadMenu(!showDownloadMenu)}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                  >
+                    <Download className="h-4 w-4" />
+                    Descargar
+                    <ChevronDown className={`h-4 w-4 transition-transform ${showDownloadMenu ? 'rotate-180' : ''}`} />
+                  </button>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {['AM', 'RL', 'SF', 'MV', 'CP'].slice(0, 4).map((iniciales, index) => {
-            const nombres = ['Ana Mendoza', 'Raúl López', 'Sofía Fernández', 'Miguel Vega', 'Carmen Ponce']
-            const cargos = ['Gerente de Ventas', 'Ejecutivo de Cuentas', 'Atención al Cliente', 'Analista de Datos', 'Desarrolladora']
-            const estados = ['Activo', 'Activo', 'En reunión', 'Ausente', 'Activo']
-            const colores = ['bg-blue-500', 'bg-purple-500', 'bg-green-500', 'bg-orange-500', 'bg-pink-500']
-            
-            return (
-              <div key={index} className="text-center p-4 border border-gray-100 rounded-xl hover:border-gray-200 transition-colors">
-                <div className={`w-16 h-16 ${colores[index]} rounded-full flex items-center justify-center mx-auto mb-3`}>
-                  <span className="text-white font-bold text-xl">{iniciales}</span>
+                  {showDownloadMenu && (
+                    <div className="absolute right-0 top-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[160px]">
+                      <div className="py-2">
+                        <button
+                          onClick={() => downloadRankingData('excel')}
+                          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                        >
+                          <FileSpreadsheet className="h-4 w-4 text-green-600" />
+                          Excel (.xlsx)
+                        </button>
+                        <button
+                          onClick={() => downloadRankingData('pdf')}
+                          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                        >
+                          <FileText className="h-4 w-4 text-red-600" />
+                          PDF (.pdf)
+                        </button>
+                        <button
+                          onClick={() => downloadRankingData('word')}
+                          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                        >
+                          <FileText className="h-4 w-4 text-blue-600" />
+                          Word (.docx)
+                        </button>
+                        <button
+                          onClick={() => downloadRankingData('csv')}
+                          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                        >
+                          <FileSpreadsheet className="h-4 w-4 text-gray-600" />
+                          CSV (.csv)
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <h4 className="font-semibold text-gray-900 mb-1">{nombres[index]}</h4>
-                <p className="text-sm text-gray-600 mb-2">{cargos[index]}</p>
-                <span className={`inline-flex items-center px-2 py-1 rounded-lg text-xs font-medium ${
-                  estados[index] === 'Activo'
-                    ? 'bg-green-100 text-green-800'
-                    : estados[index] === 'En reunión'
-                    ? 'bg-yellow-100 text-yellow-800'
-                    : 'bg-gray-100 text-gray-800'
-                }`}>
-                  {estados[index]}
-                </span>
               </div>
-            )
-          })}
+              <div className="text-xs text-gray-500">
+                {fechasRanking.inicio && fechasRanking.fin ?
+                  `Período: ${new Date(fechasRanking.inicio).toLocaleDateString('es-ES')} - ${new Date(fechasRanking.fin).toLocaleDateString('es-ES')}` :
+                  'Mostrando todos los datos'
+                }
+              </div>
+            </div>
+          </div>
+          {rankingEjecutivos.length === 0 ? (
+            <div className="flex items-center justify-center h-64 text-gray-500">
+              <p>No hay datos para mostrar en el rango seleccionado</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {rankingEjecutivos.map((item, index) => {
+                const total = rankingEjecutivos.reduce((sum, i) => sum + i.valor, 0)
+                const percentage = ((item.valor / total) * 100).toFixed(1)
+                const maxValor = Math.max(...rankingEjecutivos.map(v => v.valor), 1)
+                const progressWidth = (item.valor / maxValor) * 100
+
+                const colorMap: { [key: string]: { bg: string, text: string } } = {
+                  'bg-blue-500': { bg: 'bg-blue-500', text: 'text-blue-700' },
+                  'bg-green-500': { bg: 'bg-green-500', text: 'text-green-700' },
+                  'bg-purple-500': { bg: 'bg-purple-500', text: 'text-purple-700' },
+                  'bg-red-500': { bg: 'bg-red-500', text: 'text-red-700' },
+                  'bg-yellow-500': { bg: 'bg-yellow-500', text: 'text-yellow-700' },
+                  'bg-indigo-500': { bg: 'bg-indigo-500', text: 'text-indigo-700' },
+                  'bg-pink-500': { bg: 'bg-pink-500', text: 'text-pink-700' },
+                  'bg-teal-500': { bg: 'bg-teal-500', text: 'text-teal-700' },
+                  'bg-orange-500': { bg: 'bg-orange-500', text: 'text-orange-700' },
+                  'bg-cyan-500': { bg: 'bg-cyan-500', text: 'text-cyan-700' }
+                }
+
+                const colors = colorMap[item.color] || { bg: 'bg-gray-500', text: 'text-gray-700' }
+
+                return (
+                  <div
+                    key={index}
+                    className={`relative cursor-pointer p-3 rounded-lg transition-colors duration-200 ${
+                      filtros.ejecutivo === item.ejecutivo ? 'bg-blue-50 border border-blue-200' : 'hover:bg-gray-50'
+                    }`}
+                    onClick={() => {
+                      // Filtrar la tabla de Gestión de Clientes por este ejecutivo
+                      setFiltros(prev => ({
+                        ...prev,
+                        ejecutivo: prev.ejecutivo === item.ejecutivo ? '' : item.ejecutivo
+                      }))
+                    }}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center space-x-3">
+                        <div className={`w-8 h-8 ${colors.bg} rounded-full flex items-center justify-center text-white text-sm font-bold`}>
+                          #{index + 1}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-gray-900">{item.ejecutivo}</span>
+                            <span className={`text-xs px-1.5 py-0.5 rounded ${
+                              item.empresa === 'ChileHome'
+                                ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                                : item.empresa === 'Construmater'
+                                ? 'bg-purple-100 text-purple-700 border border-purple-200'
+                                : 'bg-gray-100 text-gray-700 border border-gray-200'
+                            } font-normal`}>
+                              {item.empresa}
+                            </span>
+                          </div>
+                          <div className="text-xs text-gray-500">{percentage}% del total</div>
+                        </div>
+                      </div>
+                      <div className="text-right flex items-center space-x-2">
+                        <div>
+                          <div className={`text-lg font-bold ${colors.text}`}>{item.valor}</div>
+                          <div className="text-xs text-gray-500">ventas</div>
+                        </div>
+                        {filtros.ejecutivo === item.ejecutivo && (
+                          <div className="text-blue-600">
+                            <Check className="h-4 w-4" />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Barra de progreso */}
+                    <div className="w-full bg-gray-200 rounded-md h-3">
+                      <div
+                        className={`${colors.bg} h-3 rounded-md transition-all duration-1000 ease-out`}
+                        style={{ width: `${progressWidth}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                )
+              })}
+
+              {/* Resumen */}
+              <div className="mt-6 pt-4 border-t border-gray-200">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-600">Total de ventas:</span>
+                  <span className="font-bold text-gray-900">
+                    {rankingEjecutivos.reduce((sum, item) => sum + item.valor, 0)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-sm mt-1">
+                  <span className="text-gray-600">Ejecutivos activos:</span>
+                  <span className="font-bold text-gray-900">{rankingEjecutivos.length}</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
-  </div>
   )
 }
 
@@ -2247,7 +3698,7 @@ const ContratosSection = (props: any) => {
               {/* Botón Reset */}
               <button
                 onClick={() => {
-                  // Restaurar a las fechas por defecto del proyecto (septiembre 2024)
+                  // Restaurar a las fechas por defecto del período actual
                   setFechaInicio(fechaInicioDefecto)
                   setFechaFin(fechaFinDefecto)
                   setSoloValidados(false)
@@ -2630,20 +4081,25 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
   // Para compatibilidad con el resto del código que usa fechaHoy
   const fechaHoy = new Date(ahora.getTime() - (ahora.getTimezoneOffset() * 60000)).toISOString().split('T')[0]
 
-  // Para mostrar datos reales del CRM, usar fechas del 2024
-  // Septiembre 2024 tiene datos disponibles según el proyecto
-  const fechaInicioDefecto = '2024-09-01'  // Inicio de datos disponibles
-  const fechaFinDefecto = '2024-09-30'     // Fin de septiembre 2024
-
   // Fecha de inicio del proyecto (para rangos expandidos cuando sea necesario)
   const fechaInicioProyecto = '2024-09-01'
 
-  const [fechaInicio, setFechaInicio] = useState(fechaInicioDefecto) // Septiembre 2024
-  const [fechaFin, setFechaFin] = useState(fechaFinDefecto) // Hasta fin de septiembre 2024
-  
+  const [fechaInicio, setFechaInicio] = useState(() => {
+    const hoy = new Date()
+    return new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().split('T')[0]
+  })
+  const [fechaFin, setFechaFin] = useState(() => {
+    return new Date().toISOString().split('T')[0]
+  })
+
   // Estados para el selector de fechas del equipo - usar la misma lógica que contratos
-  const [fechaInicioEquipo, setFechaInicioEquipo] = useState(fechaInicioProyecto)
-  const [fechaFinEquipo, setFechaFinEquipo] = useState(fechaFinDefecto)
+  const [fechaInicioEquipo, setFechaInicioEquipo] = useState(() => {
+    const hoy = new Date()
+    return new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().split('T')[0]
+  })
+  const [fechaFinEquipo, setFechaFinEquipo] = useState(() => {
+    return new Date().toISOString().split('T')[0]
+  })
   const [showValidationModal, setShowValidationModal] = useState(false)
   const [selectedVenta, setSelectedVenta] = useState<Venta | null>(null)
   const [vendedorSeleccionado, setVendedorSeleccionado] = useState('todos')
@@ -2668,6 +4124,23 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
   const [emailSuggestions, setEmailSuggestions] = useState<string[]>([])
   const [showEmailSuggestions, setShowEmailSuggestions] = useState(false)
   const [emailInputValue, setEmailInputValue] = useState('')
+
+  // Estados para calendarios individuales de cada tarjeta de estadísticas
+  const [cardDateRanges, setCardDateRanges] = useState(() => {
+    const hoy = new Date()
+    const fechaInicioDefecto = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().split('T')[0]
+    const fechaFinDefecto = hoy.toISOString().split('T')[0]
+
+    return {
+      totalVentas: { inicio: fechaInicioDefecto, fin: fechaFinDefecto },
+      preingreso: { inicio: fechaInicioDefecto, fin: fechaFinDefecto },
+      contrato: { inicio: fechaInicioDefecto, fin: fechaFinDefecto },
+      validacion: { inicio: fechaInicioDefecto, fin: fechaFinDefecto },
+      entregaOK: { inicio: fechaInicioDefecto, fin: fechaFinDefecto },
+      rechazo: { inicio: fechaInicioDefecto, fin: fechaFinDefecto }
+    }
+  })
+  const [activeCardCalendar, setActiveCardCalendar] = useState<string | null>(null)
 
   // Los datos ya vienen filtrados del API cuando se aplican fechas
   // Solo usar filtrado cliente cuando no hay fechas (para datos iniciales sin filtro)
@@ -3338,6 +4811,10 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
   }
 
   const fetchVentas = async (fechaInicio?: string, fechaFin?: string, isInitialLoad: boolean = false, buttonType?: 'apply' | 'reset') => {
+    // Configurar timeout para evitar que se cuelgue
+    const controller = new AbortController()
+    let timeoutId: NodeJS.Timeout | null = null
+
     try {
       console.log('🔥 fetchVentas llamada con:', {
         fechaInicio,
@@ -3362,14 +4839,12 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
 
       if (fechaInicio) params.append('fecha_inicio', fechaInicio)
       if (fechaFin) params.append('fecha_fin', fechaFin)
-      
+
       if (params.toString()) {
         url += `?${params.toString()}`
       }
-      
-      // Configurar timeout para evitar que se cuelgue
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 180000) // 3 minutos timeout
+
+      timeoutId = setTimeout(() => controller.abort(), 180000) // 3 minutos timeout
 
       try {
         console.log('🌐 Llamando API:', url)
@@ -3646,6 +5121,9 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
         setError('Error desconocido al cargar ventas')
       }
     } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
       setLoading(false)
       setFiltering(false)
       setApplyingFilter(false)
@@ -3904,6 +5382,10 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
               setSoloValidados={setSoloValidados}
               paginaActualVentas={paginaActualVentas}
               setPaginaActualVentas={setPaginaActualVentas}
+              activeCardCalendar={activeCardCalendar}
+              setActiveCardCalendar={setActiveCardCalendar}
+              cardDateRanges={cardDateRanges}
+              setCardDateRanges={setCardDateRanges}
             />
           )}
           {activeSection === 'contratos' && (

@@ -61,6 +61,20 @@ const TIPOS_NOTIFICACIONES: TipoNotificacion[] = [
     frecuencia: 'Todos los días a las 07:30',
     ejemplo: '🌅 ¡Buenos días equipo ChileHome!\n\n💪 Es un nuevo día lleno de oportunidades\n📈 Meta de hoy: Superar las 5 ventas\n🎯 Recordatorio: Seguimiento de clientes pendientes\n\n¡Vamos por un excelente día! 🚀'
   },
+  {
+    id: 'ranking_ejecutivos_semanal',
+    nombre: 'Ranking de Ejecutivos Semanal',
+    descripcion: 'Ranking semanal de rendimiento de ejecutivos por ventas',
+    frecuencia: 'Lunes a las 08:00 (resumen de la semana anterior)',
+    ejemplo: '🏆 RANKING SEMANAL DE EJECUTIVOS\n📅 Semana del 9 al 15 de septiembre\n\n🥇 1. Carlos Ruiz - 12 ventas (24.5%)\n🥈 2. Ana García - 9 ventas (18.4%)\n🥉 3. María López - 7 ventas (14.3%)\n4. Pedro Silva - 6 ventas (12.2%)\n5. Gloria Codina - 5 ventas (10.2%)\n\n📊 Total: 49 ventas | 💰 Meta semanal: 45 ventas ✅'
+  },
+  {
+    id: 'ranking_ejecutivos_personalizado',
+    nombre: 'Ranking de Ejecutivos Personalizado',
+    descripcion: 'Ranking de ejecutivos por fechas seleccionadas manualmente',
+    frecuencia: 'Envío manual por fechas específicas',
+    ejemplo: '🏆 RANKING DE EJECUTIVOS\n📅 Del 1 al 30 de septiembre 2025\n\n🥇 1. Carlos Ruiz - 28 ventas (22.8%)\n🥈 2. Ana García - 24 ventas (19.5%)\n🥉 3. María López - 19 ventas (15.4%)\n4. Pedro Silva - 17 ventas (13.8%)\n5. Gloria Codina - 15 ventas (12.2%)\n\n📊 Total: 132 ventas | 🎯 Objetivo mensual: 120 ventas ✅\n📈 Crecimiento: +15% vs mes anterior'
+  },
 ]
 
 const ROLES_DISPONIBLES = [
@@ -78,6 +92,12 @@ export default function ConfiguracionMensajes() {
   const [mostrandoInfo, setMostrandoInfo] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Estados para ranking personalizado
+  const [mostrandoRankingPersonalizado, setMostrandoRankingPersonalizado] = useState(false)
+  const [fechaInicioRanking, setFechaInicioRanking] = useState('')
+  const [fechaFinRanking, setFechaFinRanking] = useState('')
+  const [enviandoRanking, setEnviandoRanking] = useState(false)
 
   // Cargar configuraciones desde Supabase
   useEffect(() => {
@@ -426,7 +446,7 @@ export default function ConfiguracionMensajes() {
   // Función para enviar notificación a usuarios específicos
   const enviarNotificacionUsuarios = async (tipo: string) => {
     try {
-      console.log(`📤 Enviando ${tipo} a usuarios configurados...`)
+      console.log(`📤 Enviando ${tipo} a usuarios configurados vía N8N...`)
 
       // Filtrar usuarios que reciben este tipo de notificación
       const usuariosDestino = configuraciones.filter(config =>
@@ -438,49 +458,96 @@ export default function ConfiguracionMensajes() {
         return
       }
 
-      let enviados = 0
-      let fallidos = 0
-      const resultados = []
-
-      for (const usuario of usuariosDestino) {
-        try {
-          const response = await fetch('/api/whatsapp-real', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              tipo,
-              telefono_destino: usuario.destinatario
-            })
+      // TODOS los tipos de mensaje ahora usan N8N (webhook de prueba)
+      try {
+        const response = await fetch('/api/n8n-send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tipo,
+            fechaInicio: fechaInicioRanking,
+            fechaFin: fechaFinRanking
           })
+        })
 
-          const resultado = await response.json()
+        const resultado = await response.json()
 
-          if (resultado.success) {
-            enviados++
-            resultados.push(`✅ ${usuario.destinatario_nombre}: ${resultado.whatsapp_id}`)
-            console.log(`✅ Enviado a ${usuario.destinatario_nombre} (${usuario.destinatario})`)
-          } else {
-            fallidos++
-            resultados.push(`❌ ${usuario.destinatario_nombre}: ${resultado.error}`)
-            console.error(`❌ Error enviando a ${usuario.destinatario_nombre}:`, resultado.error)
-          }
-        } catch (error) {
-          fallidos++
-          resultados.push(`❌ ${usuario.destinatario_nombre}: Error de conexión`)
-          console.error(`❌ Error enviando a ${usuario.destinatario_nombre}:`, error)
+        if (resultado.success) {
+          alert(`✅ Notificación "${tipo}" enviada exitosamente vía N8N\n📤 ${resultado.data_sent?.destinatarios || usuariosDestino.length} destinatarios\n🎯 ${resultado.message}\n🔗 Webhook: webhook-chilehome-pro`)
+        } else {
+          alert(`❌ Error enviando "${tipo}" vía N8N:\n${resultado.error}\n\n💡 Asegúrate de que N8N esté activado:\n1. Abre tu N8N Cloud\n2. Click "Execute workflow"\n3. Intenta de nuevo`)
         }
-
-        // Pequeña pausa entre envíos para evitar rate limiting
-        await new Promise(resolve => setTimeout(resolve, 500))
+      } catch (error) {
+        alert(`❌ Error de conexión con N8N:\n${error}\n\n🔗 Webhook: https://n8n.srv865688.hstgr.cloud/webhook-test/webhook-chilehome-pro`)
       }
-
-      // Mostrar resumen
-      const resumen = `📊 RESUMEN DE ENVÍO - ${tipo}\n\n✅ Enviados: ${enviados}\n❌ Fallidos: ${fallidos}\n\nDetalles:\n${resultados.join('\n')}`
-      alert(resumen)
 
     } catch (error) {
       console.error(`❌ Error general enviando ${tipo}:`, error)
       alert(`❌ Error general al enviar ${tipo}`)
+    }
+  }
+
+  // Función para enviar ranking personalizado
+  const enviarRankingPersonalizado = async () => {
+    if (!fechaInicioRanking || !fechaFinRanking) {
+      alert('⚠️ Por favor selecciona las fechas de inicio y fin para el ranking')
+      return
+    }
+
+    if (new Date(fechaInicioRanking) > new Date(fechaFinRanking)) {
+      alert('⚠️ La fecha de inicio no puede ser posterior a la fecha de fin')
+      return
+    }
+
+    setEnviandoRanking(true)
+
+    try {
+      console.log(`🏆 Enviando ranking personalizado del ${fechaInicioRanking} al ${fechaFinRanking} vía N8N`)
+
+      // Filtrar usuarios que reciben este tipo de notificación
+      const usuariosDestino = configuraciones.filter(config =>
+        config.activo && config.tipos_notificacion.includes('ranking_ejecutivos_personalizado')
+      )
+
+      if (usuariosDestino.length === 0) {
+        alert(`⚠️ No hay usuarios configurados para recibir "Ranking de Ejecutivos Personalizado"`)
+        setEnviandoRanking(false)
+        return
+      }
+
+      // Enviar a N8N (maneja todos los destinatarios configurados)
+      try {
+        const response = await fetch('/api/n8n-send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tipo: 'ranking_ejecutivos_personalizado',
+            fechaInicio: fechaInicioRanking,
+            fechaFin: fechaFinRanking
+          })
+        })
+
+        const resultado = await response.json()
+
+        if (resultado.success) {
+          alert(`✅ Ranking Personalizado enviado exitosamente vía N8N\n📅 Período: ${fechaInicioRanking} al ${fechaFinRanking}\n📤 ${resultado.data_sent?.destinatarios || usuariosDestino.length} destinatarios\n🎯 ${resultado.message}\n🔗 Webhook: webhook-chilehome-pro`)
+        } else {
+          alert(`❌ Error enviando Ranking Personalizado vía N8N:\n${resultado.error}\n\n💡 Asegúrate de que N8N esté activado:\n1. Abre tu N8N Cloud\n2. Click "Execute workflow"\n3. Intenta de nuevo`)
+        }
+      } catch (error) {
+        alert(`❌ Error de conexión con N8N:\n${error}\n\n🔗 Webhook: https://n8n.srv865688.hstgr.cloud/webhook-test/webhook-chilehome-pro`)
+      }
+
+      // Limpiar fechas y cerrar modal
+      setFechaInicioRanking('')
+      setFechaFinRanking('')
+      setMostrandoRankingPersonalizado(false)
+
+    } catch (error) {
+      console.error(`❌ Error general enviando ranking personalizado:`, error)
+      alert(`❌ Error general al enviar ranking personalizado`)
+    } finally {
+      setEnviandoRanking(false)
     }
   }
 
@@ -570,12 +637,21 @@ export default function ConfiguracionMensajes() {
                     >
                       🧪 Prueba
                     </button>
-                    <button
-                      onClick={() => enviarNotificacionUsuarios(tipo.id)}
-                      className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded border border-blue-300 hover:bg-blue-200 font-medium"
-                    >
-                      📤 Enviar Real
-                    </button>
+                    {tipo.id === 'ranking_ejecutivos_personalizado' ? (
+                      <button
+                        onClick={() => setMostrandoRankingPersonalizado(true)}
+                        className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded border border-purple-300 hover:bg-purple-200 font-medium"
+                      >
+                        📅 Personalizar
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => enviarNotificacionUsuarios(tipo.id)}
+                        className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded border border-blue-300 hover:bg-blue-200 font-medium"
+                      >
+                        📤 Enviar Real
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -848,6 +924,107 @@ export default function ConfiguracionMensajes() {
           ))}
         </div>
       </div>
+
+      {/* Modal para Ranking Personalizado */}
+      {mostrandoRankingPersonalizado && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                🏆 Ranking Personalizado
+              </h3>
+              <button
+                onClick={() => {
+                  setMostrandoRankingPersonalizado(false)
+                  setFechaInicioRanking('')
+                  setFechaFinRanking('')
+                }}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-sm text-blue-800">
+                  📅 Selecciona el período para generar el ranking de ejecutivos por ventas
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Fecha de inicio
+                  </label>
+                  <input
+                    type="date"
+                    value={fechaInicioRanking}
+                    onChange={(e) => setFechaInicioRanking(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Fecha de fin
+                  </label>
+                  <input
+                    type="date"
+                    value={fechaFinRanking}
+                    onChange={(e) => setFechaFinRanking(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              {fechaInicioRanking && fechaFinRanking && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                  <p className="text-sm text-green-800">
+                    📊 Se generará el ranking del <strong>{new Date(fechaInicioRanking).toLocaleDateString('es-CL')}</strong> al <strong>{new Date(fechaFinRanking).toLocaleDateString('es-CL')}</strong>
+                  </p>
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => {
+                    setMostrandoRankingPersonalizado(false)
+                    setFechaInicioRanking('')
+                    setFechaFinRanking('')
+                  }}
+                  className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 font-medium"
+                  disabled={enviandoRanking}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={enviarRankingPersonalizado}
+                  disabled={!fechaInicioRanking || !fechaFinRanking || enviandoRanking}
+                  className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {enviandoRanking ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      Enviando...
+                    </>
+                  ) : (
+                    <>
+                      📤 Enviar Ranking
+                    </>
+                  )}
+                </button>
+              </div>
+
+              <div className="border-t border-slate-200 pt-4 mt-4">
+                <p className="text-xs text-slate-500">
+                  💡 Se enviará a todos los usuarios configurados para recibir "Ranking de Ejecutivos Personalizado"
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
