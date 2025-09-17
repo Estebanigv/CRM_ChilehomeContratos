@@ -742,6 +742,7 @@ Sidebar.displayName = 'Sidebar'
 const DashboardOverview = ({
   stats,
   ventas,
+  ventasCompletas,
   user,
   clientes,
   clientesLoading,
@@ -766,6 +767,7 @@ const DashboardOverview = ({
 }: {
   stats: DashboardStats,
   ventas: Venta[],
+  ventasCompletas?: Venta[],
   user: any,
   clientes: Cliente[],
   clientesLoading: boolean,
@@ -838,21 +840,41 @@ const DashboardOverview = ({
   })
 
   // Estados de fecha para cada sección (independientes pero iniciando con las mismas fechas que el principal)
-  const [fechasEstados, setFechasEstados] = useState({
-    inicio: fechaInicioDefecto,
-    fin: fechaFinDefecto
+  const [fechasEstados, setFechasEstados] = useState(() => {
+    const hoy = new Date()
+    const fechaInicioDefecto = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().split('T')[0]
+    const fechaFinDefecto = hoy.toISOString().split('T')[0]
+    return {
+      inicio: fechaInicioDefecto,
+      fin: fechaFinDefecto
+    }
   })
-  const [fechasEjecutivos, setFechasEjecutivos] = useState({
-    inicio: fechaInicioDefecto,
-    fin: fechaFinDefecto
+  const [fechasEjecutivos, setFechasEjecutivos] = useState(() => {
+    const hoy = new Date()
+    const fechaInicioDefecto = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().split('T')[0]
+    const fechaFinDefecto = hoy.toISOString().split('T')[0]
+    return {
+      inicio: fechaInicioDefecto,
+      fin: fechaFinDefecto
+    }
   })
-  const [fechasEmpresas, setFechasEmpresas] = useState({
-    inicio: fechaInicioDefecto,
-    fin: fechaFinDefecto
+  const [fechasEmpresas, setFechasEmpresas] = useState(() => {
+    const hoy = new Date()
+    const fechaInicioDefecto = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().split('T')[0]
+    const fechaFinDefecto = hoy.toISOString().split('T')[0]
+    return {
+      inicio: fechaInicioDefecto,
+      fin: fechaFinDefecto
+    }
   })
-  const [fechasRanking, setFechasRanking] = useState({
-    inicio: fechaInicioDefecto,
-    fin: fechaFinDefecto
+  const [fechasRanking, setFechasRanking] = useState(() => {
+    const hoy = new Date()
+    const fechaInicioDefecto = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().split('T')[0]
+    const fechaFinDefecto = hoy.toISOString().split('T')[0]
+    return {
+      inicio: fechaInicioDefecto,
+      fin: fechaFinDefecto
+    }
   })
 
 
@@ -1785,12 +1807,68 @@ ${Object.entries(empresasData).map(([empresa, ventas]) => {
   // Datos para los gráficos de ventas mensuales
   // Calcular ventas por estados en el rango de fechas seleccionado
   const ventasPorEstados = useMemo(() => {
+    // Usar ventasCompletas si está disponible, sino usar ventas filtradas
+    const ventasParaFiltrar = ventasCompletas || ventas
+
+    // Timestamp para forzar logs únicos en cada recalculo
+    const timestamp = new Date().toISOString().slice(11, 23)
+    console.log(`🔍 [${timestamp}] Estados - RECALCULANDO ventasPorEstados`)
+    console.log(`🔍 [${timestamp}] Estados - fechasEstados:`, fechasEstados)
+    console.log(`🔍 [${timestamp}] Estados - Total ventas para filtrar:`, ventasParaFiltrar.length)
+    console.log(`🔍 [${timestamp}] Estados - Usando ventasCompletas:`, !!ventasCompletas)
+
     // Filtrar ventas por las fechas específicas de esta sección
-    const ventasDelPeriodo = ventas.filter(venta => {
-      if (!fechasEstados.inicio || !fechasEstados.fin) return true
-      const fechaVenta = new Date(venta.fecha_venta || venta.created_at)
-      return fechaVenta >= new Date(fechasEstados.inicio) && fechaVenta <= new Date(fechasEstados.fin)
+    const ventasDelPeriodo = ventasParaFiltrar.filter(venta => {
+      if (!fechasEstados.inicio || !fechasEstados.fin) {
+        console.log(`🔍 [${timestamp}] Estados - Sin fechas configuradas, mostrando todas`)
+        return true
+      }
+
+      const fechaVentaStr = venta.fecha_venta || venta.created_at
+      if (!fechaVentaStr) return false
+
+      // Normalizar fecha de venta a formato YYYY-MM-DD
+      let fechaVentaNormalizada = fechaVentaStr
+
+      // Si contiene 'T', es formato ISO, extraer solo la fecha
+      if (fechaVentaStr.includes('T')) {
+        fechaVentaNormalizada = fechaVentaStr.split('T')[0]
+      }
+      // Si es formato DD-MM-YYYY (formato del CRM), convertir a YYYY-MM-DD
+      else if (fechaVentaStr.includes('-') && fechaVentaStr.length >= 10) {
+        const parts = fechaVentaStr.split(' ')[0].split('-') // Tomar solo la parte de fecha, ignorar hora
+        if (parts.length === 3 && parts[0].length <= 2) {
+          // Es formato DD-MM-YYYY, convertir a YYYY-MM-DD
+          fechaVentaNormalizada = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`
+        }
+      }
+
+      const estaEnRango = fechaVentaNormalizada >= fechasEstados.inicio && fechaVentaNormalizada <= fechasEstados.fin
+
+      // Debug para primeras 5 comparaciones
+      if (ventasParaFiltrar.indexOf(venta) < 5) {
+        console.log(`🔍 [${timestamp}] Estados - Comparación #${ventasParaFiltrar.indexOf(venta)}:`, {
+          fechaVentaOriginal: fechaVentaStr,
+          fechaVentaNormalizada: fechaVentaNormalizada,
+          inicio: fechasEstados.inicio,
+          fin: fechasEstados.fin,
+          estaEnRango
+        })
+      }
+
+      return estaEnRango
     })
+
+    console.log(`🔍 [${timestamp}] Estados - Ventas en el período:`, ventasDelPeriodo.length)
+
+    // Mostrar más detalles de las ventas filtradas
+    if (ventasDelPeriodo.length > 0) {
+      console.log(`🔍 [${timestamp}] Estados - Primeras 5 ventas del período:`, ventasDelPeriodo.slice(0, 5).map(v => ({
+        id: v.id,
+        fecha: v.fecha_venta || v.created_at,
+        estado: v.estado_crm
+      })))
+    }
 
     // Agrupar por estados
     const estadosCount: { [key: string]: number } = {}
@@ -1802,6 +1880,8 @@ ${Object.entries(empresasData).map(([empresa, ventas]) => {
       }
       estadosCount[estado]++
     })
+
+    console.log(`🔍 [${timestamp}] Estados - Conteo por estado:`, estadosCount)
 
     // Colores específicos por estado (usando los mismos que en getEstadoStyle)
     const coloresEstados: { [key: string]: string } = {
@@ -1826,8 +1906,42 @@ ${Object.entries(empresasData).map(([empresa, ventas]) => {
       }))
       .sort((a, b) => b.valor - a.valor) // Ordenar de mayor a menor
 
+    console.log(`🔍 [${timestamp}] Estados - Resultados filtrados:`, resultados)
+
+    // Solo usar fallback si NO hay fechas configuradas, no si el filtro está vacío
+    if (resultados.length === 0 && (!fechasEstados.inicio || !fechasEstados.fin)) {
+      console.log(`🔍 [${timestamp}] Estados - Sin fechas configuradas, usando todas las ventas`)
+
+      // Recrear estadísticas con todas las ventas
+      const estadosCountFallback: { [key: string]: number } = {}
+
+      ventasParaFiltrar.forEach(venta => {
+        const estado = venta.estado_crm || 'Sin estado'
+        if (!estadosCountFallback[estado]) {
+          estadosCountFallback[estado] = 0
+        }
+        estadosCountFallback[estado]++
+      })
+
+      const resultadosFallback = Object.entries(estadosCountFallback)
+        .map(([estado, cantidad]) => ({
+          estado,
+          valor: cantidad,
+          color: coloresEstados[estado] || 'bg-gray-500'
+        }))
+        .sort((a, b) => b.valor - a.valor)
+
+      console.log(`🔍 [${timestamp}] Estados - Resultados fallback:`, resultadosFallback)
+      return resultadosFallback
+    }
+
+    // Si hay fechas configuradas pero no resultados, mostrar mensaje apropiado
+    if (resultados.length === 0 && fechasEstados.inicio && fechasEstados.fin) {
+      console.log(`🔍 [${timestamp}] Estados - Sin datos en el período seleccionado`)
+    }
+
     return resultados
-  }, [ventas, fechasEstados.inicio, fechasEstados.fin])
+  }, [ventas, ventasCompletas, fechasEstados.inicio, fechasEstados.fin])
 
   // Calcular ventas por ejecutivo usando todas las ventas disponibles
   const ventasPorEjecutivos = useMemo(() => {
@@ -2769,7 +2883,7 @@ ${Object.entries(empresasData).map(([empresa, ventas]) => {
                 <h3 className="text-lg font-semibold text-gray-900">Distribución de Ventas por Estados</h3>
                 <div className="text-xs text-gray-500 mt-1">
                   Período: {fechasEstados.inicio && fechasEstados.fin ?
-                    `${new Date(fechasEstados.inicio).toLocaleDateString('es-ES')} - ${new Date(fechasEstados.fin).toLocaleDateString('es-ES')}` :
+                    `${fechasEstados.inicio.split('-').reverse().join('/')} - ${fechasEstados.fin.split('-').reverse().join('/')}` :
                     'Mostrando todos los datos'
                   }
                 </div>
@@ -2805,12 +2919,6 @@ ${Object.entries(empresasData).map(([empresa, ventas]) => {
                   maxDate={new Date()}
                 />
               </div>
-            </div>
-            <div className="text-xs text-gray-500">
-              {fechasEstados.inicio && fechasEstados.fin ?
-                `Mostrando datos: ${new Date(fechasEstados.inicio).toLocaleDateString('es-ES')} - ${new Date(fechasEstados.fin).toLocaleDateString('es-ES')}` :
-                'Mostrando todos los datos'
-              }
             </div>
           </div>
           {ventasPorEstados.length === 0 ? (
@@ -4055,6 +4163,7 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
   })
   const [paginaActualVentas, setPaginaActualVentas] = useState(1)
   const [ventas, setVentas] = useState<Venta[]>([])
+  const [ventasCompletas, setVentasCompletas] = useState<Venta[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [clientesLoading, setClientesLoading] = useState(false)
   const [clientesError, setClientesError] = useState<string | null>(null)
@@ -4904,7 +5013,34 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
         console.log(`📊 Ventas totales: ${data.ventas.length}, Eliminadas: ${ventasEliminadasIds.length}, Activas: ${ventasActivas.length}`)
         
         setVentas(ventasActivas)
-        
+
+        // Si hay filtros de fecha, también obtener todas las ventas sin filtrar para calendarios independientes
+        if (fechaInicio && fechaFin) {
+          try {
+            const responseCompletas = await fetch('/api/crm/ventas', {
+              method: 'GET',
+              headers: { 'Content-Type': 'application/json' },
+              signal: controller.signal
+            })
+
+            if (responseCompletas.ok) {
+              const dataCompletas = await safeParseJSON(responseCompletas)
+              if (dataCompletas && dataCompletas.success && dataCompletas.ventas) {
+                const ventasCompletasActivas = dataCompletas.ventas.filter((v: Venta) => v && v.id && !ventasEliminadasIds.includes(v.id))
+                setVentasCompletas(ventasCompletasActivas)
+                console.log('🔍 [DEBUG] Ventas completas cargadas:', ventasCompletasActivas.length)
+              }
+            }
+          } catch (error) {
+            console.log('⚠️ No se pudieron cargar las ventas completas:', error)
+            // Si falla, usar las ventas filtradas como backup
+            setVentasCompletas(ventasActivas)
+          }
+        } else {
+          // Si no hay filtros, las ventas actuales son las completas
+          setVentasCompletas(ventasActivas)
+        }
+
         const totalVentas = ventasActivas.length
         
         // Debug: Estados únicos recibidos del CRM
@@ -5362,9 +5498,10 @@ export default function DashboardClient({ user, contratos }: { user: any, contra
         <div className={`${sidebarCollapsed ? 'ml-16' : 'ml-64'} transition-all duration-300`}>
           <main className="p-6">
           {activeSection === 'dashboard' && (
-            <DashboardOverview 
-              stats={statsFiltradas} 
-              ventas={ventasFiltradas} 
+            <DashboardOverview
+              stats={statsFiltradas}
+              ventas={ventasFiltradas}
+              ventasCompletas={ventasCompletas}
               user={user}
               clientes={convertVentasToClientes(ventasFiltradas)}
               clientesLoading={clientesLoading}
