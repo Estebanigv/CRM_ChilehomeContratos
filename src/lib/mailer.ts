@@ -1,6 +1,6 @@
 import { Resend } from 'resend'
 
-const resend = new Resend(process.env.EMAIL_API_KEY)
+const resend = new Resend(process.env.EMAIL_API_KEY || 'dummy-key-for-build')
 
 interface EmailData {
   clienteNombre: string

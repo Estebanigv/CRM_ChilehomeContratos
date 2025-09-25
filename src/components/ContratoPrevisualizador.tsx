@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { User, Contrato, Cliente } from '@/types'
 import { safeParseJSON } from '@/lib/utils'
+import { numeroATexto, formatearMontoEnTexto, formatearFechaTexto } from '@/utils/numberToText'
 import { 
   ArrowLeft, 
   Edit, 
@@ -34,66 +35,6 @@ export default function ContratoPrevisualizador({ contrato, user }: ContratoPrev
   const [planoPreview, setPlanoPreview] = useState<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const router = useRouter()
-
-  // Función para convertir números a palabras en español
-  const numeroATexto = (numero: number): string => {
-    const unidades = ['', 'uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve'];
-    const decenas = ['', '', 'veinte', 'treinta', 'cuarenta', 'cincuenta', 'sesenta', 'setenta', 'ochenta', 'noventa'];
-    const especiales = ['diez', 'once', 'doce', 'trece', 'catorce', 'quince', 'dieciséis', 'diecisiete', 'dieciocho', 'diecinueve'];
-    const centenas = ['', 'ciento', 'doscientos', 'trescientos', 'cuatrocientos', 'quinientos', 'seiscientos', 'setecientos', 'ochocientos', 'novecientos'];
-
-    if (numero === 0) return 'cero';
-    if (numero === 100) return 'cien';
-    if (numero === 1000) return 'mil';
-    if (numero === 1000000) return 'un millón';
-
-    let resultado = '';
-    
-    // Millones
-    if (numero >= 1000000) {
-      const millones = Math.floor(numero / 1000000);
-      if (millones === 1) {
-        resultado += 'un millón ';
-      } else {
-        resultado += numeroATexto(millones) + ' millones ';
-      }
-      numero %= 1000000;
-    }
-
-    // Miles
-    if (numero >= 1000) {
-      const miles = Math.floor(numero / 1000);
-      if (miles === 1) {
-        resultado += 'mil ';
-      } else {
-        resultado += numeroATexto(miles) + ' mil ';
-      }
-      numero %= 1000;
-    }
-
-    // Centenas
-    if (numero >= 100) {
-      const cent = Math.floor(numero / 100);
-      resultado += centenas[cent] + ' ';
-      numero %= 100;
-    }
-
-    // Decenas y unidades
-    if (numero >= 20) {
-      const dec = Math.floor(numero / 10);
-      resultado += decenas[dec];
-      numero %= 10;
-      if (numero > 0) {
-        resultado += ' y ' + unidades[numero];
-      }
-    } else if (numero >= 10) {
-      resultado += especiales[numero - 10];
-    } else if (numero > 0) {
-      resultado += unidades[numero];
-    }
-
-    return resultado.trim();
-  }
 
   const handleGenerarPDF = async () => {
     setLoading(true)

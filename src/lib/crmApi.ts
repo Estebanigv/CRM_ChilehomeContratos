@@ -353,9 +353,21 @@ class CRMApi {
 
     const estado = ventaCRM.ref_est_nom || 'Sin estado'
     const numeroContrato = ventaCRM.ref_ins_ord || '0'
-    
+
     // La regla correcta: si numero_contrato != "0", entonces TIENE contrato
     const tieneContrato = numeroContrato !== '0' && numeroContrato !== '' && numeroContrato !== null
+
+    // Debug logging para septiembre 2025
+    const fechaVenta = new Date(ventaCRM.ref_cre_fec)
+    if (fechaVenta.getFullYear() === 2025 && fechaVenta.getMonth() === 8) { // Septiembre 2025
+      console.log(`🔍 DEBUG Mapeo CRM [${ventaCRM.ref_id}]:`, {
+        estado_original: ventaCRM.ref_est_nom,
+        numero_contrato: numeroContrato,
+        tiene_contrato: tieneContrato,
+        fecha_venta: ventaCRM.ref_cre_fec,
+        cliente: ventaCRM.ref_nom
+      })
+    }
 
     return {
       id: ventaCRM.ref_id,
@@ -385,10 +397,28 @@ class CRMApi {
       ejecutivo_nombre: `${ventaCRM.ref_usu_nom} (${ventaCRM.ref_usu_per_nom || 'Vendedor'})`, // ⭐ VENDEDOR COMPLETO
       supervisor_nombre: ventaCRM.ref_usu_sup_nom || 'Sin supervisor',
       estado_crm: (() => {
-        if (estado === 'Entrega OK' || estado === 'Confirmación de entrega') {
-          return estado
+        let estadoFinal = estado
+
+        // Primero verificar si es un estado de entrega final
+        if (estado === 'Entrega OK') {
+          estadoFinal = 'Entrega OK'
+        } else if (estado === 'Confirmación de entrega') {
+          estadoFinal = 'Confirmación de entrega'
+        } else if (estado === 'Despacho') {
+          estadoFinal = 'Despacho'
+        } else if (tieneContrato) {
+          // Si tiene contrato pero no está en estados finales, mostrar "Contrato"
+          estadoFinal = estado === 'Validación' || estado === 'Pre-ingreso' || estado === 'Producción' || estado === 'Planificación' || estado === 'Adquisiciones'
+            ? 'Contrato'
+            : estado
         }
-        return tieneContrato ? 'Contrato' : estado
+
+        // Debug para septiembre 2025
+        if (fechaVenta.getFullYear() === 2025 && fechaVenta.getMonth() === 8) {
+          console.log(`🏷️ ESTADO FINAL [${ventaCRM.ref_id}]: ${estado} -> ${estadoFinal}`)
+        }
+
+        return estadoFinal
       })(),
       observaciones_crm: ventaCRM.ref_est_bit || 'Sin observaciones',
       numero_contrato: numeroContrato
@@ -436,14 +466,14 @@ class CRMApi {
     const ventasBase = this.getMockVentas()
     const ventasExpandidas = []
     
-    // Generar 32 ventas para septiembre 2024 (como indica el usuario)
+    // Generar 32 ventas para septiembre 2025 (como indica el usuario)
     for (let i = 0; i < 29; i++) {  // 29 + 3 de ventasBase = 32 total
-      // Generar fechas aleatorias dentro de septiembre 2024
+      // Generar fechas aleatorias dentro de septiembre 2025
       const dia = Math.floor(Math.random() * 30) + 1 // Día 1-30 de septiembre
-      const fecha = new Date(2024, 8, dia) // Mes 8 = septiembre (0-indexed)
+      const fecha = new Date(2025, 8, dia) // Mes 8 = septiembre (0-indexed)
       
-      // Estados reales del CRM según la captura
-      const estados = ['Pre-ingreso', 'Validación', 'Producción', 'Confirmación de entrega', 'Planificación', 'Rechazo', 'Adquisiciones', 'Despacho', 'Entrega OK']
+      // Estados reales del CRM según la captura - asegurar distribución de Entrega OK
+      const estados = ['Pre-ingreso', 'Validación', 'Producción', 'Confirmación de entrega', 'Planificación', 'Rechazo', 'Adquisiciones', 'Despacho', 'Entrega OK', 'Entrega OK', 'Entrega OK']
       const estadoIndex = i % estados.length
       
       ventasExpandidas.push({
@@ -463,7 +493,7 @@ class CRMApi {
         supervisor_nombre: ['Ana Supervisor', 'Luis Supervisor', 'Carmen Supervisor'][i % 3],
         estado_crm: estados[estadoIndex],
         observaciones_crm: `Observación mock ${i + 1} - Cliente requiere seguimiento`,
-        numero_contrato: estadoIndex < 3 ? `CONT-2024-${1000 + i}` : '0'
+        numero_contrato: estadoIndex < 3 ? `CONT-2025-${1000 + i}` : '0'
       })
     }
     
@@ -472,7 +502,7 @@ class CRMApi {
 
   // Datos mock para desarrollo y testing
   private getMockVentas(): CRMVenta[] {
-    // Primeras 3 ventas de septiembre 2024
+    // Primeras 3 ventas de septiembre 2025
     return [
       {
         id: '1',
@@ -484,14 +514,14 @@ class CRMApi {
         valor_total: 85000000,
         modelo_casa: 'Modelo 120m²',
         detalle_materiales: 'Casa prefabricada de madera, 3 dormitorios, 2 baños, cocina americana, living-comedor, terraza 20m²',
-        fecha_venta: new Date(2024, 8, 1).toISOString(), // 1 de septiembre 2024
-        fecha_entrega: new Date(2024, 9, 1).toISOString().split('T')[0],
+        fecha_venta: new Date(2025, 8, 1).toISOString(), // 1 de septiembre 2025
+        fecha_entrega: new Date(2025, 9, 1).toISOString().split('T')[0],
         ejecutivo_id: '1',
         ejecutivo_nombre: 'Juan Pérez',
         supervisor_nombre: 'Ana Supervisor',
         estado_crm: 'Validación', // Estado original del CRM, se convertirá a "Contrato" por la lógica
         observaciones_crm: 'Cliente confirmó especificaciones',
-        numero_contrato: 'CONT-2024-001'
+        numero_contrato: 'CONT-2025-001'
       },
       {
         id: '2',
@@ -503,8 +533,8 @@ class CRMApi {
         valor_total: 62000000,
         modelo_casa: 'Modelo 85m²',
         detalle_materiales: 'Casa prefabricada de madera, 2 dormitorios, 1 baño, cocina, living-comedor, terraza 15m²',
-        fecha_venta: new Date(2024, 8, 2).toISOString(), // 2 de septiembre 2024
-        fecha_entrega: new Date(2024, 9, 2).toISOString().split('T')[0],
+        fecha_venta: new Date(2025, 8, 2).toISOString(), // 2 de septiembre 2025
+        fecha_entrega: new Date(2025, 9, 2).toISOString().split('T')[0],
         ejecutivo_id: '2',
         ejecutivo_nombre: 'María González',
         supervisor_nombre: 'Luis Supervisor',
@@ -522,8 +552,8 @@ class CRMApi {
         valor_total: 95000000,
         modelo_casa: 'Modelo 140m²',
         detalle_materiales: 'Casa prefabricada de madera, 4 dormitorios, 3 baños, cocina isla, living-comedor, estudio, terraza 25m²',
-        fecha_venta: new Date(2024, 8, 3).toISOString(), // 3 de septiembre 2024
-        fecha_entrega: new Date(2024, 9, 3).toISOString().split('T')[0],
+        fecha_venta: new Date(2025, 8, 3).toISOString(), // 3 de septiembre 2025
+        fecha_entrega: new Date(2025, 9, 3).toISOString().split('T')[0],
         ejecutivo_id: '3',
         ejecutivo_nombre: 'Carlos Rodríguez',
         supervisor_nombre: 'Carmen Supervisor',

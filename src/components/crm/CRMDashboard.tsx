@@ -62,6 +62,15 @@ export default function CRMDashboard() {
   useEffect(() => {
     cargarDatos()
     cargarUsuario()
+
+    // Configurar actualización automática cada 30 minutos
+    const intervalId = setInterval(() => {
+      console.log('🔄 Actualizando datos del CRM automáticamente (cada 30 minutos)')
+      cargarDatos()
+    }, 30 * 60 * 1000) // 30 minutos en milisegundos
+
+    // Limpiar el intervalo cuando el componente se desmonte
+    return () => clearInterval(intervalId)
   }, [])
 
   const cargarUsuario = async () => {

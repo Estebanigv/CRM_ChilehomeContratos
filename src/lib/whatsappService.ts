@@ -516,6 +516,77 @@ El contrato está listo para producción y despacho. 🚀
   `.trim()
 }
 
+function generarMensajeClientePendiente(datos: any): string {
+  return `
+⏰ *RECORDATORIO - CLIENTE PENDIENTE*
+
+👤 *Cliente:* ${datos.cliente_nombre}
+📋 *RUT:* ${datos.cliente_rut}
+📱 *Teléfono:* ${datos.cliente_telefono}
+📄 *Contrato:* #${datos.numero_contrato || 'Por generar'}
+📅 *Días pendiente:* ${datos.dias_pendiente || '3'} días
+🔔 *Estado actual:* ${datos.estado_actual || 'Pendiente'}
+
+📝 *Acción requerida:*
+${datos.accion_requerida || '• Contactar cliente para confirmar datos\n• Validar documentación\n• Procesar contrato'}
+
+👔 *Ejecutivo responsable:* ${datos.ejecutivo_nombre}
+
+Por favor realizar seguimiento urgente 🚨
+  `.trim()
+}
+
+function generarMensajeSeguimientoPendientes(pendientes: any[]): string {
+  const listaPendientes = pendientes.slice(0, 5).map((p, i) =>
+    `${i + 1}. ${p.cliente_nombre} - ${p.estado_crm} (${p.dias_pendiente || 1} días)`
+  ).join('\n')
+
+  return `
+📋 *SEGUIMIENTO CONTRATOS PENDIENTES*
+
+⏳ *Total pendientes:* ${pendientes.length}
+📅 *Fecha:* ${new Date().toLocaleDateString('es-CL')}
+
+*Clientes que requieren atención:*
+${listaPendientes}
+
+${pendientes.length > 5 ? `\n...y ${pendientes.length - 5} más` : ''}
+
+⚠️ *Acción requerida:*
+Por favor revisar y actualizar el estado de estos contratos lo antes posible.
+
+_Mensaje automático de seguimiento_
+  `.trim()
+}
+
+function generarMensajeProcesoActualizado(datos: any): string {
+  const emoji = datos.nuevo_estado?.includes('completado') ? '✅' :
+                datos.nuevo_estado?.includes('rechazado') ? '❌' :
+                datos.nuevo_estado?.includes('proceso') ? '⏳' : '📝'
+
+  return `
+${emoji} *ACTUALIZACIÓN DE ESTADO*
+
+📄 *Contrato:* #${datos.numero_contrato}
+👤 *Cliente:* ${datos.cliente_nombre}
+
+*Estado anterior:* ${datos.estado_anterior || 'Pendiente'}
+*Nuevo estado:* ${datos.nuevo_estado}
+
+📅 *Actualizado:* ${new Date().toLocaleString('es-CL')}
+👔 *Por:* ${datos.actualizado_por || 'Sistema'}
+
+${datos.observaciones ? `\n💬 *Observaciones:*\n${datos.observaciones}` : ''}
+  `.trim()
+}
+
+function calcularDiasPendiente(fechaCreacion: string): number {
+  const fecha = new Date(fechaCreacion)
+  const hoy = new Date()
+  const diferencia = hoy.getTime() - fecha.getTime()
+  return Math.floor(diferencia / (1000 * 60 * 60 * 24))
+}
+
 function getCurrentWeekNumber(): string {
   const today = new Date()
   const firstDayOfYear = new Date(today.getFullYear(), 0, 1)
@@ -524,4 +595,10 @@ function getCurrentWeekNumber(): string {
   return `${weekNumber}/${today.getFullYear()}`
 }
 
-export { WhatsAppService }
+export {
+  WhatsAppService,
+  generarMensajeClientePendiente,
+  generarMensajeSeguimientoPendientes,
+  generarMensajeProcesoActualizado,
+  calcularDiasPendiente
+}

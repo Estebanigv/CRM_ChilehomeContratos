@@ -1,81 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { MessageSquare, Clock, Users, Plus, Edit, Trash2, Save, Bell, Phone, CheckSquare, Square, Info } from 'lucide-react'
-
-interface ConfiguracionPersona {
-  id: string
-  destinatario: string
-  destinatario_nombre: string
-  rol: string
-  activo: boolean
-  tipos_notificacion: string[] // Array de tipos que recibirá esta persona
-  configuracion: {
-    incluir_detalles: boolean
-    incluir_metricas: boolean
-    incluir_links: boolean
-  }
-}
-
-interface TipoNotificacion {
-  id: string
-  nombre: string
-  descripcion: string
-  frecuencia: string
-  ejemplo: string
-}
-
-const TIPOS_NOTIFICACIONES: TipoNotificacion[] = [
-  {
-    id: 'resumen_diario',
-    nombre: 'Resumen Diario',
-    descripcion: 'Resumen completo de ventas del día con estadísticas y detalles',
-    frecuencia: 'Todos los días a las 08:00',
-    ejemplo: '📊 RESUMEN DIARIO - ' + new Date().toLocaleDateString('es-CL') + '\n• 7 ventas nuevas\n• $18.750.000 total\n• Mejor ejecutivo: Ana García (3 ventas)\n• Región top: Metropolitana'
-  },
-  {
-    id: 'resumen_semanal',
-    nombre: 'Resumen Semanal',
-    descripcion: 'Estadísticas completas de la semana con ranking y análisis',
-    frecuencia: 'Domingos a las 09:00',
-    ejemplo: '📈 RESUMEN SEMANAL\n• 34 ventas esta semana\n• $89.400.000 total\n🏆 Top ejecutivo: Carlos Ruiz (12 ventas)\n📍 Región líder: Valparaíso\n📊 Promedio: $2.630.000 por venta'
-  },
-  {
-    id: 'nueva_venta_crm',
-    nombre: 'Nueva Venta CRM',
-    descripcion: 'Notificación inmediata cuando se carga una nueva venta al CRM',
-    frecuencia: 'Inmediato al cargar al CRM',
-    ejemplo: '🎉 NUEVA VENTA INGRESADA\n👤 Cliente: María López Contreras\n💰 Monto: $2.400.000\n🏠 Modelo: Casa 54m²\n👨‍💼 Ejecutivo: Carlos Ruiz\n📍 Región: Bío Bío'
-  },
-  {
-    id: 'contrato_validado',
-    nombre: 'Contrato Validado',
-    descripcion: 'Notificación cuando un contrato cambia a estado "validado"',
-    frecuencia: 'Inmediato al validar contrato',
-    ejemplo: '✅ CONTRATO VALIDADO\n👤 Cliente: Pedro Martínez\n💰 Valor: $3.200.000\n📋 Contrato: #3154\n👨‍💼 Ejecutivo: Gloria Codina\n📅 Fecha entrega: 15/10/2024'
-  },
-  {
-    id: 'saludo_matutino',
-    nombre: 'Saludo Matutino',
-    descripcion: 'Mensaje de saludo diario con motivación y recordatorios',
-    frecuencia: 'Todos los días a las 07:30',
-    ejemplo: '🌅 ¡Buenos días equipo ChileHome!\n\n💪 Es un nuevo día lleno de oportunidades\n📈 Meta de hoy: Superar las 5 ventas\n🎯 Recordatorio: Seguimiento de clientes pendientes\n\n¡Vamos por un excelente día! 🚀'
-  },
-  {
-    id: 'ranking_ejecutivos_semanal',
-    nombre: 'Ranking de Ejecutivos Semanal',
-    descripcion: 'Ranking semanal de rendimiento de ejecutivos por ventas',
-    frecuencia: 'Lunes a las 08:00 (resumen de la semana anterior)',
-    ejemplo: '🏆 RANKING SEMANAL DE EJECUTIVOS\n📅 Semana del 9 al 15 de septiembre\n\n🥇 1. Carlos Ruiz - 12 ventas (24.5%)\n🥈 2. Ana García - 9 ventas (18.4%)\n🥉 3. María López - 7 ventas (14.3%)\n4. Pedro Silva - 6 ventas (12.2%)\n5. Gloria Codina - 5 ventas (10.2%)\n\n📊 Total: 49 ventas | 💰 Meta semanal: 45 ventas ✅'
-  },
-  {
-    id: 'ranking_ejecutivos_personalizado',
-    nombre: 'Ranking de Ejecutivos Personalizado',
-    descripcion: 'Ranking de ejecutivos por fechas seleccionadas manualmente',
-    frecuencia: 'Envío manual por fechas específicas',
-    ejemplo: '🏆 RANKING DE EJECUTIVOS\n📅 Del 1 al 30 de septiembre 2025\n\n🥇 1. Carlos Ruiz - 28 ventas (22.8%)\n🥈 2. Ana García - 24 ventas (19.5%)\n🥉 3. María López - 19 ventas (15.4%)\n4. Pedro Silva - 17 ventas (13.8%)\n5. Gloria Codina - 15 ventas (12.2%)\n\n📊 Total: 132 ventas | 🎯 Objetivo mensual: 120 ventas ✅\n📈 Crecimiento: +15% vs mes anterior'
-  },
-]
+import { MessageSquare, Users, Plus, Edit, Trash2, Save, Phone, CheckSquare, Square, Bell, Info } from 'lucide-react'
+import { TIPOS_NOTIFICACIONES, ConfiguracionPersona } from '@/constants/notificationTypes'
+import NotificationTypeCard from '@/components/notifications/NotificationTypeCard'
 
 const ROLES_DISPONIBLES = [
   { valor: 'dueño', label: 'Dueño de la empresa' },

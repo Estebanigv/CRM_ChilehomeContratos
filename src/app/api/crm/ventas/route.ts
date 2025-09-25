@@ -2,19 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { crmApi } from '@/lib/crmApi'
 import { tempStorage } from '@/lib/tempStorage'
+import { requireAuth } from '@/lib/auth/serverAuth'
 
 // GET - Obtener ventas desde CRM
 export async function GET(request: NextRequest) {
   try {
-    console.log('🧪 TEST MODE - Skipping authentication for CRM testing') // Debug
-    
-    // TEMP: Skip auth for testing
-    // const supabase = await createClient()
-    // const { data: { user } } = await supabase.auth.getUser()
-    // if (!user) { return NextResponse.json({ error: 'No autorizado' }, { status: 401 }) }
-    
-    // Mock user profile for testing
-    const userProfile = { role: 'admin', id: 'test-user' }
+    console.log('🔗 API CRM ventas - Conectando al CRM real')
 
     // Obtener parámetros de consulta
     const { searchParams } = new URL(request.url)
@@ -23,11 +16,8 @@ export async function GET(request: NextRequest) {
     const fechaFin = searchParams.get('fecha_fin')
 
     try {
-      // Los ejecutivos solo pueden ver sus propias ventas (excepto admins)
-      const filtroEjecutivo = userProfile.role === 'admin' ? ejecutivoId : userProfile.id
-
-      // Obtener ventas del CRM con filtros de fecha
-      const ventas = await crmApi.obtenerVentas(filtroEjecutivo, fechaInicio ?? undefined, fechaFin ?? undefined)
+      // Obtener ventas del CRM con filtros de fecha (sin filtro de ejecutivo por ahora)
+      const ventas = await crmApi.obtenerVentas(undefined, fechaInicio ?? undefined, fechaFin ?? undefined)
 
       // Filtrar ventas eliminadas usando tempStorage
       const idsEliminados = new Set(tempStorage.getEliminatedIds())
@@ -37,9 +27,34 @@ export async function GET(request: NextRequest) {
       console.log(`🗑️ Fichas eliminadas: ${idsEliminados.size} filtradas`)
       console.log(`✅ Ventas disponibles: ${ventasDisponibles.length} mostradas`)
 
-      // TEMP: Skip Supabase for testing
-      // const { data: contractosExistentes } = await supabase.from('contratos').select('id')
-      const idsContratosExistentes = new Set()
+      // Debug: Mostrar TODOS los estados únicos que están llegando del CRM
+      const estadosUnicos = [...new Set(ventasDisponibles.map(v => v.estado_crm))].filter(Boolean)
+      console.log(`🔍 ESTADOS ÚNICOS DEL CRM (${estadosUnicos.length} tipos):`)
+      estadosUnicos.forEach(estado => {
+        const cantidad = ventasDisponibles.filter(v => v.estado_crm === estado).length
+        console.log(`  📊 "${estado}": ${cantidad} ventas`)
+      })
+
+      // Debug: Mostrar los campos de fecha disponibles en las primeras 3 ventas
+      console.log('🗓️ DEBUG CAMPOS DE FECHA DEL CRM:')
+      ventasDisponibles.slice(0, 3).forEach((venta, idx) => {
+        console.log(`  Venta ${idx + 1} (ID: ${venta.id}):`)
+        console.log(`    - fecha_venta: "${venta.fecha_venta}" (${typeof venta.fecha_venta})`)
+        console.log(`    - created_at: "${venta.created_at}" (${typeof venta.created_at})`)
+        console.log(`    - fecha_entrega: "${venta.fecha_entrega}" (${typeof venta.fecha_entrega})`)
+        console.log(`    - fecha_ingreso: "${venta.fecha_ingreso}" (${typeof venta.fecha_ingreso})`)
+        console.log(`    - otros campos de fecha:`, Object.keys(venta).filter(k => k.includes('fecha')))
+      })
+
+      // Obtener contratos existentes desde Supabase
+      const supabase = await createClient()
+      const { data: contractosExistentes } = await supabase
+        .from('contratos')
+        .select('id')
+
+      const idsContratosExistentes = new Set(
+        contractosExistentes?.map(c => c.id) || []
+      )
 
       return NextResponse.json({
         success: true,

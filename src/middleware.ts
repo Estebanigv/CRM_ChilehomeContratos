@@ -59,7 +59,7 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   // Rutas públicas que no requieren autenticación
-  const publicRoutes = ['/login', '/api/auth', '/api/crm', '/api/clientes', '/api/test-whatsapp-simple', '/api/test-simple', '/api/notificaciones', '/api/configuraciones-whatsapp', '/api/whatsapp'] // TEMP: Allow APIs for testing
+  const publicRoutes = ['/login', '/api/auth', '/api/crm', '/api/temp-crm', '/api/clientes', '/api/test-whatsapp-simple', '/api/test-simple', '/api/notificaciones', '/api/configuraciones-whatsapp', '/api/whatsapp'] // TEMP: Allow APIs for testing
   const isPublicRoute = publicRoutes.some(route => 
     request.nextUrl.pathname.startsWith(route)
   )

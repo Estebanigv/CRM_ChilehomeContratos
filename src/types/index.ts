@@ -1,3 +1,9 @@
+// Exportación centralizada de todos los tipos
+export * from './common'
+export * from './ventas'
+export * from './dashboard'
+
+// Tipos legacy mantenidos por compatibilidad
 export interface User {
   id: string;
   email: string;
